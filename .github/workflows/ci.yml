@@ -53,13 +53,15 @@ jobs:
           done
           curl -fsS http://localhost:55900/minio/health/live >/dev/null
 
+      # Uses the pinned mc image rather than downloading the binary: MinIO's
+      # direct download URL now returns 410, and this matches what
+      # infra/compose/docker-compose.yml already does locally.
       - name: Create the private media bucket
         run: |
-          sudo curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
-          sudo chmod +x /usr/local/bin/mc
-          mc alias set local http://localhost:55900 storiesminio storiesminio_local_dev
-          mc mb --ignore-existing local/stories-media
-          mc anonymous set none local/stories-media
+          docker run --rm --network host \
+            --entrypoint /bin/sh \
+            quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z \
+            -c "mc alias set local http://localhost:55900 storiesminio storiesminio_local_dev && mc mb --ignore-existing local/stories-media && mc anonymous set none local/stories-media"
 
       - name: ffmpeg (the media worker transcodes real video)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
