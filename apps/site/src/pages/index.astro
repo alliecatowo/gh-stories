@@ -103,8 +103,10 @@ const audiences = Object.entries(VISIBILITY_LABELS);
         it inline, and says so.
       </p>
       <p class="section-intro">
-        Video is never claimed inline: the CLI shows a real poster frame from the video, plus a
-        command to open it in an external player. No terminal renders inline video here.
+        Video plays <em>inline</em> in kitty, as moving pixels, using the graphics protocol's
+        frame animation. That needs ffmpeg on your machine and does not work over SSH, because
+        the frames are handed to the terminal as local files. Everywhere else the CLI shows the
+        real poster frame plus a command to open it, and tells you which one you got.
       </p>
       <p>
         <a href={withBase('/docs/support/')}>See the exact platform and renderer support matrix →</a>

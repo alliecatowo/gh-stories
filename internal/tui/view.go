@@ -86,6 +86,10 @@ func (m *Model) View() string {
 	}
 
 	switch {
+	case m.hasInlineVideo():
+		// The animation occupies the plane; reserve it with blank lines and
+		// place the graphic after the text frame, exactly like a still.
+		b.WriteString(strings.Repeat("\n", imageRows))
 	case m.mode == modeViewers:
 		b.WriteString(m.viewersPane(imageRows))
 	case m.mode == modeHelp:
@@ -115,7 +119,11 @@ func (m *Model) View() string {
 		frame = m.pendingRaw + frame
 		m.pendingRaw = ""
 	}
-	if m.current != nil && m.mode == modeViewing {
+	// The animation is written straight to the terminal from a command (see
+	// startAnimation), not embedded here: it is a sequence of control escapes
+	// that must reach the terminal in order, and routing them through a
+	// line-diffing text renderer was verified not to start playback.
+	if m.current != nil && m.mode == modeViewing && !m.hasInlineVideo() {
 		frame += m.imagePlacement(imageRows)
 	}
 	return frame
@@ -259,6 +267,8 @@ func (m *Model) statusLine() string {
 			styleDim.Render("   esc to cancel")
 	case m.errMsg != "":
 		return " " + styleErr.Render(terminal.SanitizeTruncate(m.errMsg, m.width-3))
+	case m.videoNote != "":
+		return " " + styleDim.Render(terminal.SanitizeTruncate(m.videoNote, m.width-3))
 	case m.statusMsg != "":
 		return " " + styleStatus.Render(terminal.SanitizeTruncate(m.statusMsg, m.width-3))
 	case m.loading:
@@ -396,4 +406,11 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// hasInlineVideo reports whether decoded frames are ready for the item on
+// screen.
+func (m *Model) hasInlineVideo() bool {
+	it := m.currentItem()
+	return m.animator != nil && it != nil && m.framesFor == it.ID && len(m.frames) > 0
 }

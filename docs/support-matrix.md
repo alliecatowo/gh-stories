@@ -26,7 +26,7 @@ Cross-compilation is **not** runtime validation. The three rows without an
 
 | Terminal | Renderer | Built | Exercised | Visually verified |
 |---|---|---|---|---|
-| kitty | Kitty graphics protocol | ✅ | ✅ | ✅ — the TUI, an inline image, small-window layout and the honest fallback were all captured as real pixels |
+| kitty | Kitty graphics protocol | ✅ | ✅ | ✅ — the TUI, an inline image, **inline video**, small-window layout and the honest fallback were all captured as real pixels |
 | iTerm2 | iTerm2 inline images | ✅ | — | — (see [blockers #4](blockers.md)) |
 | WezTerm | decided by probe | ✅ | — | — |
 | Ghostty | Kitty graphics protocol | ✅ | — | — |
@@ -41,8 +41,25 @@ The external fallback **was** visually verified (forced with
 description, the reason it cannot draw inline, and how to open the media —
 never a claim that a picture is on screen.
 
-**Inline terminal video is not supported and is not claimed.** Video shows a
-real poster frame plus an external-open action.
+## Inline video
+
+`gh stories` can play a Story's video **inline, as moving pixels**, using the
+Kitty graphics protocol's frame animation. It is not universal:
+
+| Requirement | Why |
+|---|---|
+| kitty (or another terminal implementing kitty graphics animation) | iTerm2's inline-image protocol has no frame concept |
+| `ffmpeg` on the machine running the CLI | frames are decoded locally |
+| **not** over SSH | frames are handed to the terminal as local files, which a remote terminal cannot read |
+
+Where any of those is missing, the CLI shows the real poster frame and an
+external-open action, and says which. It never shows a still and calls it
+video. `--video=auto` (default) decides; `--video=inline` asks for it and
+reports why if refused; `--video=poster` never animates.
+
+Verified: kitty 0.43.1 on a real X display, ~120,000 pixels changing between
+captures 0.35 s apart across five consecutive intervals. Captures in
+`evidence/terminal/inline-video-frame-{a,b}.png`.
 
 ## Browser extension
 

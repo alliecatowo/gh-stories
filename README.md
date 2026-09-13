@@ -60,7 +60,7 @@ Full instructions, the platform/renderer support matrix and a sample demo:
 | **Stories** | Image and video uploads with captions and descriptions. Each item expires 24 hours after *it* was published. |
 | **Privacy** | People I follow · My followers · Mutuals · Custom list · Public. Hide from specific people; turn replies and reactions off. |
 | **Browser** | Dashboard row, avatar rings across GitHub, viewer, composer, inbox, settings, and a toolbar that works even if the page integration breaks. |
-| **Terminal** | A full-screen TUI that renders the actual picture, posts, replies, reacts, and shows who viewed. |
+| **Terminal** | A full-screen TUI that renders the actual picture — and plays video inline in kitty — plus posting, replies, reactions and viewer lists. |
 
 Both clients talk to the same service, so read state, follows, privacy, replies,
 reactions and deletions stay in sync.

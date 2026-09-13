@@ -1,0 +1,36 @@
+# Same harness, but with a current kitty from upstream rather than the 2022
+# build Debian bookworm ships. Animation support in particular has moved on.
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        xvfb x11-utils xdotool imagemagick \
+        libgl1-mesa-dri libglx-mesa0 libegl1 libxkbcommon0 libwayland-client0 \
+        libfontconfig1 libcanberra0 libdbus-1-3 libx11-xcb1 libxcb-render0 \
+        libxcb-shape0 libxcb-xfixes0 libxcb-xkb1 libxcb-cursor0 libxcb-image0 \
+        libxcb-keysyms1 libxcb-icccm4 libxkbcommon-x11-0 \
+        libxcursor1 libxi6 libxinerama1 libxrandr2 \
+        fonts-dejavu-core fonts-noto-color-emoji \
+        ca-certificates curl xz-utils procps ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG KITTY_VERSION=0.43.1
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      arm64) k=arm64 ;; \
+      amd64) k=x86_64 ;; \
+      *) echo "unsupported arch $arch"; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/kitty.txz \
+      "https://github.com/kovidgoyal/kitty/releases/download/v${KITTY_VERSION}/kitty-${KITTY_VERSION}-${k}.txz"; \
+    mkdir -p /opt/kitty; \
+    tar -xJf /tmp/kitty.txz -C /opt/kitty; \
+    rm /tmp/kitty.txz; \
+    ln -sf /opt/kitty/bin/kitty /usr/local/bin/kitty
+
+ENV LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe DISPLAY=:99 TERM=xterm-kitty
+WORKDIR /work
+COPY capture.sh /usr/local/bin/capture.sh
+RUN chmod +x /usr/local/bin/capture.sh
+ENTRYPOINT ["/usr/local/bin/capture.sh"]

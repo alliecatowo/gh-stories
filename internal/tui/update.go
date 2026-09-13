@@ -14,7 +14,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		// A resize invalidates the placed image: redraw it at the new geometry.
+		// A resize invalidates the placed image and any running animation:
+		// every frame has to be re-sent at the new geometry.
+		m.stopAnimation()
 		return m, tea.Batch(m.clearImage(), m.loadCurrent())
 
 	case tea.KeyMsg:
@@ -35,6 +37,45 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.current = msg.img
 		m.errMsg = ""
+		return m, nil
+
+	case framesMsg:
+		if it := m.currentItem(); it == nil || it.ID != msg.storyID {
+			if msg.cleanup != nil {
+				msg.cleanup()
+			}
+			return m, nil
+		}
+		if msg.err != nil {
+			// Fall back to the poster frame, and say why if inline was asked
+			// for explicitly rather than chosen automatically.
+			if m.video == VideoInline {
+				m.videoNote = "inline video unavailable: " + firstLine(msg.err.Error())
+			}
+			return m, nil
+		}
+		if m.framesCleanup != nil {
+			m.framesCleanup()
+		}
+		m.frames, m.framesCleanup, m.framesFor = msg.frames, msg.cleanup, msg.storyID
+		return m, m.startAnimation()
+
+	case animationMsg:
+		if it := m.currentItem(); it == nil || it.ID != msg.storyID {
+			return m, nil
+		}
+		if msg.err != nil {
+			if m.video == VideoInline {
+				m.videoNote = "inline video failed: " + firstLine(msg.err.Error())
+			}
+			return m, nil
+		}
+		m.animation = msg.anim
+		m.animatedFor = msg.storyID
+		// Decoding and transmitting frames takes real time; restart the item's
+		// clock so the video gets its full duration on screen rather than the
+		// viewer advancing while frames were still arriving.
+		m.elapsed = 0
 		return m, nil
 
 	case actionMsg:
@@ -76,6 +117,7 @@ func (m *Model) handleTick() (tea.Model, tea.Cmd) {
 	if m.expired(it) {
 		m.current = nil
 		m.statusMsg = "This Story expired."
+		m.stopAnimation()
 		return m, tea.Batch(m.clearImage(), m.advance(), tick())
 	}
 
@@ -85,6 +127,7 @@ func (m *Model) handleTick() (tea.Model, tea.Cmd) {
 	}
 	m.elapsed += 250 * time.Millisecond
 	if m.elapsed >= m.itemDuration(it) {
+		m.stopAnimation()
 		return m, tea.Batch(m.clearImage(), m.advance(), tick())
 	}
 	return m, tick()
@@ -174,16 +217,20 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "esc", "ctrl+c":
 		m.quitting = true
+		m.stopAnimation()
 		return m, tea.Sequence(m.clearImage(), tea.Quit)
 	case "right", "n", "l":
+		m.stopAnimation()
 		return m, tea.Batch(m.clearImage(), m.advance())
 	case "left", "p", "h":
+		m.stopAnimation()
 		return m, tea.Batch(m.clearImage(), m.back())
 	case "down", "j":
 		// Skip to the next author rather than the next item.
 		if m.group+1 < len(m.groups) {
 			m.group++
 			m.item = 0
+			m.stopAnimation()
 			return m, tea.Batch(m.clearImage(), m.loadCurrent())
 		}
 		return m, nil
@@ -191,6 +238,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.group > 0 {
 			m.group--
 			m.item = 0
+			m.stopAnimation()
 			return m, tea.Batch(m.clearImage(), m.loadCurrent())
 		}
 		return m, nil

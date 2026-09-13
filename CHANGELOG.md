@@ -5,6 +5,15 @@ All notable changes to this project are documented here. This project follows
 
 ## [Unreleased]
 
+### Added
+- **Inline video in the terminal.** `gh stories` plays a Story's video as
+  moving pixels using the Kitty graphics protocol's frame animation, rather
+  than only showing a poster frame. Requires a terminal with kitty graphics
+  animation and `ffmpeg` locally, and is unavailable over SSH because frames
+  are handed to the terminal as local files. `--video=auto|inline|poster`
+  selects the behaviour; anywhere it cannot animate, the CLI shows the real
+  poster frame and says why.
+
 ## [0.1.0]
 
 Initial release.

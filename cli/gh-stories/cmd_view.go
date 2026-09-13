@@ -12,6 +12,7 @@ import (
 	_ "image/png"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -26,6 +27,8 @@ import (
 func cmdView(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("view", flag.ContinueOnError)
 	service, renderer, asJSON := globalFlags(fs)
+	video := fs.String("video", "auto",
+		"auto | inline | poster — how to show video items")
 	var who string
 	rest := []string{}
 	for _, a := range args {
@@ -74,6 +77,7 @@ func cmdView(ctx context.Context, args []string) error {
 	caps := detectTerminal(ctx, terminal.Protocol(*renderer))
 	model := tui.New(tui.Options{
 		Groups:   groups,
+		Video:    tui.VideoMode(*video),
 		Renderer: terminal.New(caps),
 		Caps:     caps,
 		Fetch:    &fetcher{client: sess.Client},
@@ -158,6 +162,42 @@ func (f *fetcher) Media(ctx context.Context, storyID, variant string) (image.Ima
 		Width: img.Bounds().Dx(), Height: img.Bounds().Dy(),
 		IsVideo: variant == "poster",
 	}, nil
+}
+
+// MediaFile downloads a variant to a local temp file, for inline video.
+//
+// The file is written with 0600 into a private temp directory: it is a copy of
+// someone's private Story, and the caller removes it as soon as the frames are
+// decoded.
+func (f *fetcher) MediaFile(ctx context.Context, storyID, variant string) (string, func(), error) {
+	body, info, err := f.client.GetMedia(ctx, storyID, variant, "")
+	if err != nil {
+		return "", func() {}, err
+	}
+	defer body.Close()
+	_ = info
+
+	dir, err := os.MkdirTemp("", "gh-stories-media-")
+	if err != nil {
+		return "", func() {}, err
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+
+	path := filepath.Join(dir, "media.mp4")
+	out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	// Bounded: a hostile or broken service must not fill the disk.
+	const maxVideo = 200 << 20
+	n, err := io.Copy(out, io.LimitReader(body, maxVideo))
+	closeErr := out.Close()
+	if err != nil || closeErr != nil || n == 0 {
+		cleanup()
+		return "", func() {}, fmt.Errorf("could not download the video")
+	}
+	return path, cleanup, nil
 }
 
 func (f *fetcher) Reply(ctx context.Context, storyID, body string) error {
