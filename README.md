@@ -17,15 +17,31 @@ Running `gh stories` shows the same Story inside an actual terminal.
 
 ## Install
 
-**Browser extension** and **CLI** artifacts are published on the
+**CLI** and **browser extension** artifacts are published on the
 [latest release](https://github.com/alliecatowo/gh-stories/releases/latest).
+The browser extension is a **manual install** — it is not in the Chrome Web
+Store, and there is no signed Firefox add-on.
 
 ```bash
 gh extension install alliecatowo/gh-stories
 gh stories setup     # explains and offers: gh alias set story stories
-gh stories login
-gh stories
+gh stories doctor    # tells you what is and is not configured
 ```
+
+> **There is no public GitHub Stories service yet.** Everything server-side is
+> built, tested and published as a runnable container image — but nothing is
+> deployed, because this project has no hosting credentials. Until one exists,
+> point the clients at your own:
+>
+> ```bash
+> export GHS_SERVICE_URL=https://your-service.example
+> gh stories login
+> gh stories
+> ```
+>
+> Running one takes a container, PostgreSQL and an S3-compatible bucket — see
+> the [runbook](docs/runbook.md). The remaining external gates are listed
+> honestly in [docs/blockers.md](docs/blockers.md).
 
 `gh stories` is the canonical command namespace. Everything documented works
 under `gh stories` with no setup. `gh stories setup` additionally offers the
