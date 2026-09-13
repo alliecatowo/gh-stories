@@ -76,6 +76,10 @@ func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/login", s.getLogin)
 	r.Get("/account", s.getHome)
+	// /device is the short URL the CLI prints. The user opens it, types the
+	// code their terminal showed, and approves.
+	r.Get("/device", s.getDevice)
+	r.Post("/device", s.postDevice)
 	r.Get("/account/authorize", s.getAuthorize)
 	r.Post("/account/authorize", s.postAuthorize)
 	r.Get("/account/settings", s.getSettings)
@@ -203,6 +207,38 @@ func (s *Server) postAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	s.page(w, r, "authorized.html", pageData{Title: "Authorized", User: u,
 		Data: map[string]any{"Approved": true}})
+}
+
+// getDevice asks for the code the CLI printed.
+func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) {
+	u := s.requireUser(w, r)
+	if u == nil {
+		return
+	}
+	s.page(w, r, "device.html", pageData{Title: "Authorize a device", User: u,
+		Data: map[string]any{"Code": strings.TrimSpace(r.URL.Query().Get("code"))}})
+}
+
+// postDevice resolves the typed code and shows exactly which client is asking
+// before anything is approved.
+func (s *Server) postDevice(w http.ResponseWriter, r *http.Request) {
+	u := s.requireUser(w, r)
+	if u == nil {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	code := strings.TrimSpace(r.PostFormValue("user_code"))
+	pending, err := s.Store.PendingLoginByCode(r.Context(), code)
+	if err != nil {
+		s.page(w, r, "device.html", pageData{Title: "Authorize a device", User: u,
+			Error: "That code is not valid, or it has already been used or expired.",
+			Data:  map[string]any{"Code": ""}})
+		return
+	}
+	http.Redirect(w, r, "/account/authorize?request="+pending.ID.String(), http.StatusSeeOther)
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {

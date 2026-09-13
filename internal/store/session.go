@@ -270,3 +270,20 @@ func (s *Store) PollPendingLogin(ctx context.Context, id uuid.UUID, secretHash [
 	})
 	return &res, err
 }
+
+// PendingLoginByCode resolves a pending authorization from the short code the
+// user typed. The code is single-use and short-lived, and this only ever
+// returns one that is still pending, so a stale or spent code reveals nothing.
+func (s *Store) PendingLoginByCode(ctx context.Context, code string) (*PendingLogin, error) {
+	var p PendingLogin
+	var kindStr string
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, user_code, client_kind, client_label, state, expires_at, approved_user_id
+		FROM pending_logins
+		WHERE upper(replace(user_code, '-', '')) = upper(replace($1, '-', ''))
+		  AND state = 'pending' AND expires_at > $2`,
+		code, s.Clock.Now()).
+		Scan(&p.ID, &p.UserCode, &kindStr, &p.ClientLabel, &p.State, &p.ExpiresAt, &p.ApprovedBy)
+	p.ClientKind = domain.ClientKind(kindStr)
+	return &p, norm(err)
+}

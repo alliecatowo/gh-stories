@@ -1,0 +1,14 @@
+{{define "device.html"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+<h1>Authorize a device</h1>
+<p>Type the code shown in your terminal. You will see which client is asking before anything is approved.</p>
+<div class="card">
+  <form method="post" action="/device">
+    <input name="user_code" value="{{.Data.Code}}" placeholder="XXXX-XXXX" autocomplete="off"
+           autocapitalize="characters" spellcheck="false" required
+           style="font:600 20px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--fg);width:220px">
+    <button class="primary" type="submit">Continue</button>
+  </form>
+  <p class="muted" style="margin-bottom:0">If you did not start this, close this page. Never type a code someone else sent you.</p>
+</div>
+{{end}}

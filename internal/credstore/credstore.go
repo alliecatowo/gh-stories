@@ -11,6 +11,9 @@ package credstore
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -64,8 +67,27 @@ type Store interface {
 // otherwise. It never fails purely because a keyring is unavailable — that
 // just selects the file backend.
 func Open() (Store, error) {
+	// An explicit choice always wins, so a headless machine, a CI job or a
+	// container can select the file backend deliberately rather than relying
+	// on keyring probing to fail in the right way.
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvBackend))) {
+	case "file":
+		return newFileStore()
+	case "keyring":
+		ks, ok := newKeyringStore()
+		if !ok {
+			return nil, fmt.Errorf(
+				"%s=keyring was requested but no OS credential store is available",
+				EnvBackend)
+		}
+		return ks, nil
+	}
 	if ks, ok := newKeyringStore(); ok {
 		return ks, nil
 	}
 	return newFileStore()
 }
+
+// EnvBackend selects the credential backend explicitly: "keyring" or "file".
+// Unset means "use the OS credential store when it actually works".
+const EnvBackend = "GHS_CREDENTIAL_STORE"
