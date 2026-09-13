@@ -47,18 +47,23 @@ export class MediaUrlCache {
     }
   }
 
-  /** Prefetches every variant of every item in one author group. Used before
-   * opening the viewer on a group so playback starts without a visible
-   * fetch, and again on `onAdvanceGroup` for the next group. */
-  async prefetchGroup(group: AuthorGroup): Promise<void> {
-    const jobs: Array<Promise<string | null>> = [];
-    for (const item of group.items) {
-      if (!item.id) continue;
-      for (const variant of item.variants ?? []) {
-        jobs.push(this.ensure(item.id, variant.kind));
-      }
-    }
-    await Promise.all(jobs);
+  /**
+   * Warms ONLY the item the viewer is about to display.
+   *
+   * Deliberately not a bulk prefetch. The media authorization gateway records
+   * a view when it delivers content-bearing bytes, so fetching a whole
+   * author's sequence up front — or the next author's — would mark Stories as
+   * viewed that the person never actually opened. Media is fetched when an
+   * item is shown, and not before.
+   */
+  async warmCurrent(group: AuthorGroup, itemIndex: number): Promise<void> {
+    const item = group.items?.[itemIndex];
+    if (!item?.id) return;
+    const displayable = (item.variants ?? []).find(
+      (v) => v.kind === 'image' || v.kind === 'video' || v.kind === 'poster',
+    );
+    if (!displayable) return;
+    await this.ensure(item.id, displayable.kind);
   }
 
   revokeAll(): void {
@@ -79,8 +84,9 @@ export class MediaPathCache {
   async prefetch(path: string): Promise<void> {
     if (this.urls.has(path)) return;
     const match = /\/media\/([^/]+)\/([^/?#]+)/.exec(path);
-    if (!match) return;
-    const [, storyId, variant] = match;
+    const storyId = match?.[1];
+    const variant = match?.[2];
+    if (!storyId || !variant) return;
     const result = await callBackground({ type: "ghs:media/fetch", storyId, variant });
     if (!result.ok) return;
     const blob = new Blob([result.data.bytes], { type: result.data.mime });

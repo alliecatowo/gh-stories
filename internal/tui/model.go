@@ -41,6 +41,14 @@ type MediaMeta struct {
 	IsVideo     bool
 }
 
+// imageSignature identifies a placement: the same picture at the same spot
+// does not need to be sent again.
+type imageSignature struct {
+	img        image.Image
+	col, row   int
+	cols, rows int
+}
+
 type mode int
 
 const (
@@ -72,14 +80,18 @@ type Model struct {
 	loading       bool
 	paused        bool
 
-	current    image.Image
-	meta       MediaMeta
-	imageID    uint32
-	lastDrawn  uint32
-	elapsed    time.Duration
-	viewers    *cliapi.ViewerList
-	pendingRaw string
-	quitting   bool
+	current image.Image
+	meta    MediaMeta
+	imageID uint32
+	// placedID is the graphics id currently on screen, and placedSig says what
+	// it depicts and where, so an unchanged frame never re-transmits it.
+	placedID     uint32
+	placedSig    imageSignature
+	pendingClear []uint32
+	elapsed      time.Duration
+	viewers      *cliapi.ViewerList
+	pendingRaw   string
+	quitting     bool
 }
 
 // Options configures a viewer.

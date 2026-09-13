@@ -24,7 +24,7 @@ export function ViewerBridge(props: ViewerBridgeProps): React.JSX.Element {
 
   useEffect(() => {
     const group = groups[startGroupIndex];
-    if (group) void cache.prefetchGroup(group);
+    if (group) void cache.warmCurrent(group, 0);
     return () => cache.revokeAll();
     // Intentionally only on mount/unmount: `groups` is a fresh array from
     // the caller on every open, and re-running per render would thrash the
@@ -40,7 +40,9 @@ export function ViewerBridge(props: ViewerBridgeProps): React.JSX.Element {
       onClose={onClose}
       onAdvanceGroup={(login) => {
         const next = groups.find((group) => group.author.login === login);
-        if (next) void cache.prefetchGroup(next);
+        // Only warm the group the viewer has actually moved to, and only
+        // its first item: fetching ahead would record views nobody made.
+        if (next) void cache.warmCurrent(next, 0);
       }}
       onViewed={(storyId) => {
         void callBackground({ type: "ghs:story/view", storyId });

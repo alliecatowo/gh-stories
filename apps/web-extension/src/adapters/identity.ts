@@ -60,7 +60,9 @@ export function extractIdentity(avatarImg: HTMLImageElement): AccountIdentity | 
   const match = SINGLE_SEGMENT_LOGIN.exec(pathOnly);
   if (!match) return null;
 
-  const login = decodeURIComponent(match[1]);
+  const captured = match[1];
+  if (!captured) return null;
+  const login = decodeURIComponent(captured);
   if (login.toLowerCase() === "ghost") return null;
   if (isBotLogin(login)) return null;
 

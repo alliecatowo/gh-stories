@@ -27,24 +27,33 @@ var (
 // imageTop is the first terminal row the image plane may occupy (1-indexed).
 const imageTop = 3
 
-// clearImage removes the previously placed graphic. Doing this explicitly on
-// every transition is what stops a stale picture from sitting underneath the
-// next one in terminals that composite images above the text plane.
+// clearImage marks the currently placed graphic for removal.
+//
+// The delete escape is NOT emitted from a command: a command runs
+// asynchronously and can easily land AFTER the next image has been placed,
+// which leaves the old picture stacked on screen. Instead the id is queued and
+// the delete is written synchronously in the very same frame that draws the
+// replacement, so ordering is guaranteed.
 func (m *Model) clearImage() tea.Cmd {
-	if m.renderer == nil || m.lastDrawn == 0 {
+	if m.renderer == nil || m.placedID == 0 {
 		return nil
 	}
-	id := m.lastDrawn
-	m.lastDrawn = 0
-	renderer := m.renderer
-	return func() tea.Msg {
-		var b strings.Builder
-		_ = renderer.Clear(&b, id)
-		if b.Len() > 0 {
-			return rawWriteMsg(b.String())
-		}
-		return nil
+	m.pendingClear = append(m.pendingClear, m.placedID)
+	m.placedID = 0
+	return nil
+}
+
+// flushClears emits the delete escapes for every image awaiting removal.
+func (m *Model) flushClears() string {
+	if m.renderer == nil || len(m.pendingClear) == 0 {
+		return ""
 	}
+	var b strings.Builder
+	for _, id := range m.pendingClear {
+		_ = m.renderer.Clear(&b, id)
+	}
+	m.pendingClear = m.pendingClear[:0]
+	return b.String()
 }
 
 type rawWriteMsg string
@@ -97,6 +106,11 @@ func (m *Model) View() string {
 	b.WriteString(m.hintLine(it))
 
 	frame := b.String()
+	// Remove any outgoing image BEFORE the replacement is drawn, in the same
+	// write. Doing it in a later frame is what leaves a stale picture behind.
+	if clears := m.flushClears(); clears != "" {
+		frame = clears + frame
+	}
 	if m.pendingRaw != "" {
 		frame = m.pendingRaw + frame
 		m.pendingRaw = ""
@@ -130,13 +144,23 @@ func (m *Model) imagePlacement(rows int) string {
 	var out strings.Builder
 	out.WriteString("\x1b7")                   // save cursor
 	fmt.Fprintf(&out, "\x1b[%d;%dH", row, col) // absolute position
+	// Re-placing the same image every frame would re-transmit megabytes of
+	// base64 continuously. Only draw when the picture or its geometry changed.
+	sig := imageSignature{img: m.current, col: col, row: row, cols: cols, rows: fitRows}
+	if m.placedID != 0 && sig == m.placedSig {
+		return ""
+	}
+	if m.placedID != 0 {
+		_ = m.renderer.Clear(&out, m.placedID)
+	}
 	m.imageID++
 	if err := m.renderer.Render(&out, m.imageID, m.current,
 		terminal.Placement{Col: col, Row: row, WidthCells: cols, HeightCells: fitRows},
 		m.caps); err != nil {
 		return ""
 	}
-	m.lastDrawn = m.imageID
+	m.placedID = m.imageID
+	m.placedSig = sig
 	out.WriteString("\x1b8") // restore cursor
 	return out.String()
 }

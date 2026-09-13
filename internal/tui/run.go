@@ -21,9 +21,9 @@ func Run(ctx context.Context, m *Model) (err error) {
 		// Belt and braces: even if Bubble Tea's own restore fails, put the
 		// terminal back into a sane state and remove any lingering graphic.
 		var b []byte
-		if m.renderer != nil && m.lastDrawn != 0 {
+		if m.renderer != nil && m.placedID != 0 {
 			var sb clearBuf
-			_ = m.renderer.Clear(&sb, m.lastDrawn)
+			_ = m.renderer.Clear(&sb, m.placedID)
 			b = sb.b
 		}
 		b = append(b, []byte("\x1b[?25h\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")...)

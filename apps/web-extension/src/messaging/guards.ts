@@ -257,3 +257,7 @@ export function isRuntimeRequest(value: unknown): value is RuntimeRequest {
   if (!isRecord(value) || typeof value.type !== "string") return false;
   return ALL_GUARDS.some((guard) => guard(value));
 }
+
+// The upload message guards live alongside their types; re-exported here so
+// every runtime message guard has one import site.
+export { isUploadStartMessage, isUploadCancelMessage } from "./types.js";

@@ -1,0 +1,84 @@
+/* The toolbar entry is deliberately self-contained: it must keep working when
+   the GitHub page integration is broken, so it shares no code path with the
+   content script beyond the background messaging client. */
+html,
+body {
+  margin: 0;
+  width: 400px;
+  min-height: 380px;
+  background: var(--ghs-canvas, #fff);
+  color: var(--ghs-fg-default, #1f2328);
+  font:
+    13px/1.5 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Inter,
+    'Noto Sans',
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+.ghs-pop-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 8px 0;
+  border-bottom: 1px solid var(--ghs-border, #d1d9e0);
+}
+.ghs-pop-tab {
+  flex: 1;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--ghs-fg-muted, #59636e);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.ghs-pop-tab[aria-selected='true'] {
+  color: var(--ghs-fg-default, #1f2328);
+  background: var(--ghs-canvas-subtle, #f6f8fa);
+  box-shadow: inset 0 -2px 0 var(--ghs-ring-1, #e5486f);
+}
+.ghs-pop-tab:focus-visible {
+  outline: 2px solid var(--ghs-accent, #0969da);
+  outline-offset: -2px;
+}
+.ghs-pop-body {
+  padding: 14px;
+}
+.ghs-pop-empty {
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--ghs-fg-muted, #59636e);
+}
+.ghs-pop-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ghs-border, #d1d9e0);
+}
+.ghs-pop-btn {
+  font: inherit;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--ghs-border, #d1d9e0);
+  background: var(--ghs-canvas, #fff);
+  color: var(--ghs-fg-default, #1f2328);
+  cursor: pointer;
+}
+.ghs-pop-btn--primary {
+  background: var(--ghs-fg-default, #1f2328);
+  color: var(--ghs-canvas, #fff);
+  border-color: transparent;
+}
+.ghs-pop-err {
+  color: #cf222e;
+  padding: 8px 0;
+}
+.ghs-pop-muted {
+  color: var(--ghs-fg-muted, #59636e);
+  font-size: 12px;
+}
