@@ -1,0 +1,73 @@
+.ghs-story-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  border-radius: var(--ghs-radius-full);
+  cursor: default;
+  flex: 0 0 auto;
+}
+
+button.ghs-story-ring {
+  cursor: pointer;
+}
+
+button.ghs-story-ring:hover .ghs-story-ring__frame[data-state="unseen"] {
+  filter: brightness(1.05);
+}
+
+/* Outer ring frame. `padding` here reserves the stroke thickness for the
+   colored states; `border` is used for the dashed muted state instead, so
+   the total footprint (fixed by the parent's width/height) never changes
+   between states. */
+.ghs-story-ring__frame {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--ghs-radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  transition: filter var(--ghs-transition-fast);
+}
+
+.ghs-story-ring__frame[data-state="unseen"] {
+  background-image: linear-gradient(135deg, var(--ghs-ring-unseen-start), var(--ghs-ring-unseen-end));
+}
+
+.ghs-story-ring__frame[data-state="seen"] {
+  background-image: none;
+  background-color: var(--ghs-ring-seen);
+}
+
+.ghs-story-ring__frame[data-state="muted"] {
+  padding: 0;
+  border: 2px dashed var(--ghs-ring-muted);
+}
+
+.ghs-story-ring__frame[data-state="none"] {
+  background: transparent;
+}
+
+.ghs-story-ring__gap {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--ghs-radius-full);
+  background: var(--ghs-canvas);
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ghs-story-ring__avatar {
+  display: block;
+  border-radius: var(--ghs-radius-full);
+  object-fit: cover;
+}

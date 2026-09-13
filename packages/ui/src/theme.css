@@ -1,0 +1,186 @@
+/**
+ * GitHub Stories design tokens.
+ * Mirrors GitHub Primer's color/spacing *values* without depending on Primer.
+ * Everything is scoped under `.ghs-root` (put this class on the outermost
+ * element the consumer mounts, inside or outside Shadow DOM) so nothing
+ * leaks onto the host page.
+ *
+ * Color mode resolution order, cascade-driven (later rules win on tie):
+ *   1. `.ghs-root` base = light values.
+ *   2. `@media (prefers-color-scheme: dark)` applies dark values when the
+ *      host has not pinned a mode.
+ *   3. An explicit `data-color-mode="dark"` on the document element (read
+ *      via a light-DOM ancestor selector, and via :host-context for the
+ *      Shadow DOM case) or a `.ghs-dark` class always wins over #2.
+ *   4. An explicit `data-color-mode="light"` / `.ghs-light` always wins
+ *      over both #2 and #3, restoring light values.
+ */
+
+.ghs-root {
+  /* Light palette (GitHub Primer light values) */
+  --ghs-canvas: #ffffff;
+  --ghs-canvas-subtle: #f6f8fa;
+  --ghs-canvas-overlay: #ffffff;
+  --ghs-border-default: #d1d9e0;
+  --ghs-border-muted: #d1d9e0b3;
+  --ghs-fg-default: #1f2328;
+  --ghs-fg-muted: #59636e;
+  --ghs-fg-on-accent: #ffffff;
+  --ghs-accent-fg: #0969da;
+  --ghs-accent-emphasis: #0969da;
+  --ghs-danger-fg: #d1242f;
+  --ghs-success-fg: #1a7f37;
+  --ghs-overlay-backdrop: rgba(140, 149, 159, 0.5);
+  --ghs-shadow-overlay: 0 8px 24px rgba(140, 149, 159, 0.2);
+
+  /* The one distinctive mark: a warm magenta -> amber ring. */
+  --ghs-ring-unseen-start: #e5486f;
+  --ghs-ring-unseen-end: #f0883e;
+  --ghs-ring-seen: #d1d9e0;
+  --ghs-ring-muted: #8c959f;
+
+  /* Type + spacing + shape, shared across modes. */
+  --ghs-font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  --ghs-font-size-sm: 12px;
+  --ghs-font-size-body: 14px;
+  --ghs-font-size-lg: 16px;
+  --ghs-font-size-xl: 20px;
+  --ghs-line-height: 1.5;
+  --ghs-space-1: 4px;
+  --ghs-space-2: 8px;
+  --ghs-space-3: 12px;
+  --ghs-space-4: 16px;
+  --ghs-space-5: 24px;
+  --ghs-space-6: 32px;
+  --ghs-radius-sm: 6px;
+  --ghs-radius-md: 8px;
+  --ghs-radius-lg: 12px;
+  --ghs-radius-full: 9999px;
+  --ghs-focus-outline: 2px solid var(--ghs-accent-fg);
+  --ghs-transition-fast: 80ms cubic-bezier(0.2, 0, 0.2, 1);
+  --ghs-transition-normal: 160ms cubic-bezier(0.2, 0, 0.2, 1);
+
+  color: var(--ghs-fg-default);
+  font-family: var(--ghs-font-sans);
+  font-size: var(--ghs-font-size-body);
+  line-height: var(--ghs-line-height);
+}
+
+@media (prefers-color-scheme: dark) {
+  .ghs-root {
+    --ghs-canvas: #0d1117;
+    --ghs-canvas-subtle: #151b23;
+    --ghs-canvas-overlay: #151b23;
+    --ghs-border-default: #3d444d;
+    --ghs-border-muted: #3d444d80;
+    --ghs-fg-default: #f0f6fc;
+    --ghs-fg-muted: #9198a1;
+    --ghs-fg-on-accent: #ffffff;
+    --ghs-accent-fg: #4493f8;
+    --ghs-accent-emphasis: #4493f8;
+    --ghs-danger-fg: #ff6a69;
+    --ghs-success-fg: #3fb950;
+    --ghs-overlay-backdrop: rgba(1, 4, 9, 0.8);
+    --ghs-shadow-overlay: 0 8px 24px rgba(1, 4, 9, 0.5);
+    --ghs-ring-seen: #3d444d;
+    --ghs-ring-muted: #6e7681;
+  }
+}
+
+[data-color-mode="dark"] .ghs-root,
+:host-context([data-color-mode="dark"]) .ghs-root,
+.ghs-root.ghs-dark,
+.ghs-dark .ghs-root {
+  --ghs-canvas: #0d1117;
+  --ghs-canvas-subtle: #151b23;
+  --ghs-canvas-overlay: #151b23;
+  --ghs-border-default: #3d444d;
+  --ghs-border-muted: #3d444d80;
+  --ghs-fg-default: #f0f6fc;
+  --ghs-fg-muted: #9198a1;
+  --ghs-fg-on-accent: #ffffff;
+  --ghs-accent-fg: #4493f8;
+  --ghs-accent-emphasis: #4493f8;
+  --ghs-danger-fg: #ff6a69;
+  --ghs-success-fg: #3fb950;
+  --ghs-overlay-backdrop: rgba(1, 4, 9, 0.8);
+  --ghs-shadow-overlay: 0 8px 24px rgba(1, 4, 9, 0.5);
+  --ghs-ring-seen: #3d444d;
+  --ghs-ring-muted: #6e7681;
+}
+
+[data-color-mode="light"] .ghs-root,
+:host-context([data-color-mode="light"]) .ghs-root,
+.ghs-root.ghs-light,
+.ghs-light .ghs-root {
+  --ghs-canvas: #ffffff;
+  --ghs-canvas-subtle: #f6f8fa;
+  --ghs-canvas-overlay: #ffffff;
+  --ghs-border-default: #d1d9e0;
+  --ghs-border-muted: #d1d9e0b3;
+  --ghs-fg-default: #1f2328;
+  --ghs-fg-muted: #59636e;
+  --ghs-fg-on-accent: #ffffff;
+  --ghs-accent-fg: #0969da;
+  --ghs-accent-emphasis: #0969da;
+  --ghs-danger-fg: #d1242f;
+  --ghs-success-fg: #1a7f37;
+  --ghs-overlay-backdrop: rgba(140, 149, 159, 0.5);
+  --ghs-shadow-overlay: 0 8px 24px rgba(140, 149, 159, 0.2);
+  --ghs-ring-seen: #d1d9e0;
+  --ghs-ring-muted: #8c959f;
+}
+
+/* High-contrast / forced-colors: the ring collapses to one solid, legible
+   system color. Color is never the ONLY read-state signal — every ring
+   consumer also renders a visually-hidden text label. */
+@media (forced-colors: active) {
+  .ghs-root {
+    --ghs-ring-unseen-start: Highlight;
+    --ghs-ring-unseen-end: Highlight;
+    --ghs-ring-seen: GrayText;
+    --ghs-ring-muted: GrayText;
+    --ghs-focus-outline: 2px solid LinkText;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .ghs-root {
+    --ghs-ring-unseen-start: LinkText;
+    --ghs-ring-unseen-end: LinkText;
+  }
+}
+
+.ghs-root * {
+  box-sizing: border-box;
+}
+
+.ghs-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ghs-root :where(button, [role="button"], a, input, textarea, select):focus-visible {
+  outline: var(--ghs-focus-outline);
+  outline-offset: 2px;
+  border-radius: var(--ghs-radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghs-root,
+  .ghs-root * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

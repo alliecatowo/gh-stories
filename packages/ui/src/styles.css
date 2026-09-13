@@ -1,0 +1,10 @@
+/* Aggregate stylesheet for @gh-stories/ui. Import this once; components
+ * import their own CSS modules for co-location, but consumers using a
+ * bundler that inlines CSS imports only need this single entry point. */
+@import "./theme.css";
+@import "./StoryRing.css";
+@import "./StoryViewer.css";
+@import "./StoryComposer.css";
+@import "./StoryRow.css";
+@import "./Inbox.css";
+@import "./SettingsPanel.css";
