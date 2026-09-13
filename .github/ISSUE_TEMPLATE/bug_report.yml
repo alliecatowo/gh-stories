@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in GitHub Stories does not work
+labels: [bug]
+body:
+  - type: dropdown
+    id: client
+    attributes:
+      label: Where did it happen?
+      options:
+        - Browser extension
+        - CLI (gh stories)
+        - Website / demo
+        - Service / API
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`gh stories version`, or the extension version from your browser's extensions page"
+    validations: {required: true}
+  - type: input
+    id: environment
+    attributes:
+      label: Browser or terminal
+      description: "e.g. Firefox 145 on Ubuntu 24.04, or kitty 0.42 over SSH with tmux"
+    validations: {required: true}
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect instead?
+    validations: {required: true}
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations: {required: true}
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or terminal output
+      description: Please redact other people's private media, captions and messages.

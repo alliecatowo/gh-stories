@@ -1,0 +1,934 @@
+openapi: 3.1.0
+info:
+  title: GitHub Stories API
+  version: "1.0.0"
+  description: |
+    Stories for GitHub. The service owns identity, the Stories social graph,
+    media authorization and 24-hour expiry. Both the browser extension and the
+    `gh stories` CLI extension speak exactly this contract.
+
+    Authorization model: every response is evaluated against the *current*
+    Stories graph. An item the caller may not view is indistinguishable from an
+    item that does not exist.
+servers:
+  - url: https://stories.example/v1
+    description: Live service (substitute the deployed base URL)
+  - url: http://localhost:8787/v1
+    description: Local development
+
+security:
+  - storiesSession: []
+
+tags:
+  - name: health
+  - name: auth
+  - name: onboarding
+  - name: feed
+  - name: stories
+  - name: media
+  - name: interactions
+  - name: graph
+  - name: settings
+  - name: moderation
+
+paths:
+  # ------------------------------------------------------------------ health
+  /health/live:
+    get:
+      tags: [health]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200": {description: Process is alive, content: {application/json: {schema: {$ref: "#/components/schemas/HealthStatus"}}}}
+  /health/ready:
+    get:
+      tags: [health]
+      summary: Readiness probe (database and object storage reachable)
+      security: []
+      responses:
+        "200": {description: Ready, content: {application/json: {schema: {$ref: "#/components/schemas/HealthStatus"}}}}
+        "503": {description: Not ready, content: {application/json: {schema: {$ref: "#/components/schemas/HealthStatus"}}}}
+
+  # -------------------------------------------------------------------- auth
+  /auth/github/start:
+    get:
+      tags: [auth]
+      summary: Begin GitHub OAuth (state + PKCE S256 held server side)
+      security: []
+      parameters:
+        - {name: return_to, in: query, schema: {type: string}, description: Relative path to return to after login}
+        - {name: pending_login_id, in: query, schema: {type: string, format: uuid}, description: Present when approving a CLI login}
+      responses:
+        "302": {description: Redirect to github.com/login/oauth/authorize}
+  /auth/github/callback:
+    get:
+      tags: [auth]
+      summary: OAuth redirect target; exchanges the code server side
+      security: []
+      parameters:
+        - {name: code, in: query, required: true, schema: {type: string}}
+        - {name: state, in: query, required: true, schema: {type: string}}
+      responses:
+        "302": {description: Redirect into the account application}
+        "400": {$ref: "#/components/responses/Error"}
+
+  /auth/cli/pending:
+    post:
+      tags: [auth]
+      summary: Create a pending client authorization for a service-mediated login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_kind]
+              properties:
+                client_kind: {type: string, enum: [cli, browser_extension]}
+                client_label: {type: string, maxLength: 120, description: "Human label shown on the approval screen, e.g. 'gh stories on allies-mbp'"}
+      responses:
+        "201":
+          description: Pending authorization created
+          content: {application/json: {schema: {$ref: "#/components/schemas/PendingLogin"}}}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/cli/poll:
+    post:
+      tags: [auth]
+      summary: Poll a pending authorization (bounded, rate limited, single use)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pending_login_id, polling_secret]
+              properties:
+                pending_login_id: {type: string, format: uuid}
+                polling_secret: {type: string}
+      responses:
+        "200":
+          description: Current authorization state; token present exactly once on approval
+          content: {application/json: {schema: {$ref: "#/components/schemas/PendingLoginPoll"}}}
+        "404": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the calling session
+      responses:
+        "204": {description: Session revoked}
+  /auth/sessions:
+    get:
+      tags: [auth]
+      summary: List the caller's active Stories sessions
+      responses:
+        "200":
+          description: Sessions
+          content: {application/json: {schema: {type: object, properties: {sessions: {type: array, items: {$ref: "#/components/schemas/SessionInfo"}}}}}}
+  /auth/sessions/{sessionId}:
+    delete:
+      tags: [auth]
+      summary: Revoke one of the caller's sessions
+      parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        "204": {description: Revoked}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /me:
+    get:
+      tags: [auth]
+      summary: The authenticated Stories account
+      responses:
+        "200": {description: Current account, content: {application/json: {schema: {$ref: "#/components/schemas/Me"}}}}
+        "401": {$ref: "#/components/responses/Error"}
+
+  # -------------------------------------------------------------- onboarding
+  /onboarding/import-follows:
+    post:
+      tags: [onboarding]
+      summary: Import the people the caller follows on GitHub (opt-out, first login)
+      description: |
+        Never mutates GitHub's follow graph. Deduplicates by numeric GitHub id,
+        preserves relationships to people who have not joined, and never
+        resurrects a relationship the user explicitly unfollowed.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: {type: boolean, default: true}
+                preview: {type: boolean, default: false, description: Compute the change set without applying it}
+      responses:
+        "200": {description: Import summary, content: {application/json: {schema: {$ref: "#/components/schemas/ImportSummary"}}}}
+
+  # -------------------------------------------------------------------- feed
+  /feed:
+    get:
+      tags: [feed]
+      summary: Authorized Story feed, grouped by author
+      description: |
+        Ordering is deterministic: unseen authors first, then natively followed
+        authors before import-only authors, then most recent eligible
+        publication, tie-broken by GitHub user id. Muted authors are omitted.
+        Fetching the feed never records a view.
+      parameters:
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 25}}
+        - {name: include_muted, in: query, schema: {type: boolean, default: false}}
+      responses:
+        "200": {description: Feed page, content: {application/json: {schema: {$ref: "#/components/schemas/Feed"}}}}
+
+  /stories/status:
+    post:
+      tags: [feed]
+      summary: Batch ring status for avatars visible on a page
+      description: |
+        Reveals only Stories the caller is allowed to access. An inaccessible
+        active Story and no Story are indistinguishable in this response: both
+        return `has_active: false` with no counts, timestamps or audiences.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                github_user_ids: {type: array, maxItems: 100, items: {type: integer, format: int64}}
+                logins: {type: array, maxItems: 100, items: {type: string}}
+      responses:
+        "200":
+          description: Ring states
+          content: {application/json: {schema: {type: object, properties: {entries: {type: array, items: {$ref: "#/components/schemas/RingStatus"}}}}}}
+        "400": {$ref: "#/components/responses/Error"}
+
+  /users/lookup:
+    get:
+      tags: [graph]
+      summary: Find a Stories account by username
+      parameters: [{name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 64}}]
+      responses:
+        "200": {description: Matches, content: {application/json: {schema: {type: object, properties: {users: {type: array, items: {$ref: "#/components/schemas/PublicUser"}}}}}}}
+
+  /users/{login}/stories:
+    get:
+      tags: [feed]
+      summary: A single author's active, authorized Story sequence
+      parameters: [{name: login, in: path, required: true, schema: {type: string}}]
+      responses:
+        "200": {description: Author sequence, content: {application/json: {schema: {$ref: "#/components/schemas/AuthorGroup"}}}}
+        "404": {$ref: "#/components/responses/Error", description: "No account, or nothing this caller may see"}
+
+  # ----------------------------------------------------------------- uploads
+  /uploads:
+    post:
+      tags: [stories]
+      summary: Request an upload authorization for one server-chosen private object key
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UploadIntentRequest"}
+      responses:
+        "201": {description: Upload authorized, content: {application/json: {schema: {$ref: "#/components/schemas/UploadIntent"}}}}
+        "413": {$ref: "#/components/responses/Error"}
+        "415": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /uploads/{uploadId}/finalize:
+    post:
+      tags: [stories]
+      summary: Finalize an upload; freezes an immutable worker input and queues processing
+      parameters:
+        - {name: uploadId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [byte_size, checksum_sha256]
+              properties:
+                byte_size: {type: integer, format: int64}
+                checksum_sha256: {type: string, pattern: "^[a-f0-9]{64}$"}
+      responses:
+        "202":
+          description: Accepted for processing. This is NOT yet "Story posted".
+          content: {application/json: {schema: {$ref: "#/components/schemas/StoryItem"}}}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error", description: Replay or already finalized}
+
+  # ----------------------------------------------------------------- stories
+  /stories/{storyId}:
+    get:
+      tags: [stories]
+      summary: Read one Story item the caller is authorized to see
+      parameters: [{$ref: "#/components/parameters/StoryId"}]
+      responses:
+        "200": {description: Story item, content: {application/json: {schema: {$ref: "#/components/schemas/StoryItem"}}}}
+        "404": {$ref: "#/components/responses/Error"}
+    patch:
+      tags: [stories]
+      summary: Update caption, description, audience or interaction settings (author only)
+      description: Narrowing the audience also revokes newly unauthorized media requests.
+      parameters: [{$ref: "#/components/parameters/StoryId"}]
+      requestBody:
+        content: {application/json: {schema: {$ref: "#/components/schemas/StoryUpdate"}}}
+      responses:
+        "200": {description: Updated, content: {application/json: {schema: {$ref: "#/components/schemas/StoryItem"}}}}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [stories]
+      summary: Delete a Story (immediate loss of server access, physical cleanup scheduled)
+      parameters: [{$ref: "#/components/parameters/StoryId"}]
+      responses:
+        "204": {description: Deleted}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /stories/mine:
+    get:
+      tags: [stories]
+      summary: The caller's own active items
+      responses:
+        "200": {description: Own items, content: {application/json: {schema: {$ref: "#/components/schemas/AuthorGroup"}}}}
+
+  /stories/{storyId}/viewers:
+    get:
+      tags: [interactions]
+      summary: Named viewer list (author only)
+      parameters: [{$ref: "#/components/parameters/StoryId"}]
+      responses:
+        "200": {description: Viewers, content: {application/json: {schema: {$ref: "#/components/schemas/ViewerList"}}}}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /stories/{storyId}/view:
+    post:
+      tags: [interactions]
+      summary: Acknowledge that delivered media actually rendered
+      description: |
+        A view is recorded by the media authorization gateway when content-bearing
+        media is delivered to an authorized non-owner. This endpoint records the
+        client's separate rendering acknowledgement; it never creates a view for
+        an unauthorized caller.
+      parameters: [{$ref: "#/components/parameters/StoryId"}]
+      responses:
+        "204": {description: Acknowledged}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /stories/{storyId}/reaction:
+    put:
+      tags: [interactions]
+      summary: Set or replace the caller's reaction
+      parameters: [{$ref: "#/components/parameters/StoryId"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emoji]
+              properties: {emoji: {$ref: "#/components/schemas/Emoji"}}
+      responses:
+        "200": {description: Reaction stored, content: {application/json: {schema: {$ref: "#/components/schemas/Reaction"}}}}
+        "403": {$ref: "#/components/responses/Error", description: Reactions disabled for this item}
+        "404": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [interactions]
+      summary: Remove the caller's reaction
+      parameters: [{$ref: "#/components/parameters/StoryId"}]
+      responses:
+        "204": {description: Removed}
+
+  /stories/{storyId}/replies:
+    post:
+      tags: [interactions]
+      summary: Send a private reply to the Story's author
+      parameters: [{$ref: "#/components/parameters/StoryId"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties: {body: {type: string, minLength: 1, maxLength: 500}}
+      responses:
+        "201": {description: Reply sent, content: {application/json: {schema: {$ref: "#/components/schemas/Reply"}}}}
+        "403": {$ref: "#/components/responses/Error", description: Replies disabled, or blocked}
+        "404": {$ref: "#/components/responses/Error"}
+
+  /inbox:
+    get:
+      tags: [interactions]
+      summary: Private inbox — replies, reactions and new followers
+      parameters:
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 30}}
+      responses:
+        "200": {description: Inbox page, content: {application/json: {schema: {$ref: "#/components/schemas/Inbox"}}}}
+  /inbox/read:
+    post:
+      tags: [interactions]
+      summary: Mark inbox entries read
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event_ids: {type: array, items: {type: string, format: uuid}, maxItems: 200}
+                all: {type: boolean, default: false}
+      responses:
+        "204": {description: Marked}
+
+  # ------------------------------------------------------------------- media
+  /media/{storyId}/{variant}:
+    get:
+      tags: [media]
+      summary: Authorization gateway for private media
+      description: |
+        Checks session, audience, block, hide, suspension, deletion and expiry on
+        every request including thumbnails and video range requests. Supports
+        HTTP range. Delivering content-bearing media to an authorized non-owner
+        records a view. There are no public or long-lived media URLs.
+      parameters:
+        - {$ref: "#/components/parameters/StoryId"}
+        - {name: variant, in: path, required: true, schema: {type: string, enum: [image, video, poster, thumb, terminal]}}
+      responses:
+        "200": {description: Media bytes, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+        "206": {description: Partial content}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error", description: Not found, not authorized, deleted or expired — indistinguishable}
+
+  # -------------------------------------------------------------------- graph
+  /following:
+    get:
+      tags: [graph]
+      summary: Accounts the caller follows on Stories
+      parameters: [{name: cursor, in: query, schema: {type: string}}, {name: limit, in: query, schema: {type: integer, default: 50, maximum: 200}}]
+      responses:
+        "200": {description: Following, content: {application/json: {schema: {$ref: "#/components/schemas/RelationshipPage"}}}}
+  /following/{login}:
+    put:
+      tags: [graph]
+      summary: Follow on Stories (never mutates the GitHub follow graph)
+      parameters: [{$ref: "#/components/parameters/Login"}]
+      responses:
+        "200": {description: Following, content: {application/json: {schema: {$ref: "#/components/schemas/Relationship"}}}}
+        "403": {$ref: "#/components/responses/Error", description: Blocked}
+        "404": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [graph]
+      summary: Unfollow (tombstoned so re-import will not resurrect it)
+      parameters: [{$ref: "#/components/parameters/Login"}]
+      responses:
+        "204": {description: Unfollowed}
+  /followers:
+    get:
+      tags: [graph]
+      summary: Accounts following the caller on Stories
+      parameters: [{name: cursor, in: query, schema: {type: string}}, {name: limit, in: query, schema: {type: integer, default: 50, maximum: 200}}]
+      responses:
+        "200": {description: Followers, content: {application/json: {schema: {$ref: "#/components/schemas/RelationshipPage"}}}}
+
+  /mutes/{login}:
+    put:
+      tags: [graph]
+      summary: Mute (affects only the muting user's presentation, not access)
+      parameters: [{$ref: "#/components/parameters/Login"}]
+      responses: {"204": {description: Muted}, "404": {$ref: "#/components/responses/Error"}}
+    delete:
+      tags: [graph]
+      summary: Unmute
+      parameters: [{$ref: "#/components/parameters/Login"}]
+      responses: {"204": {description: Unmuted}}
+  /blocks/{login}:
+    put:
+      tags: [graph]
+      summary: Block (overrides audience access in both directions)
+      parameters: [{$ref: "#/components/parameters/Login"}]
+      responses: {"204": {description: Blocked}, "404": {$ref: "#/components/responses/Error"}}
+    delete:
+      tags: [graph]
+      summary: Unblock
+      parameters: [{$ref: "#/components/parameters/Login"}]
+      responses: {"204": {description: Unblocked}}
+  /hides/{login}:
+    put:
+      tags: [graph]
+      summary: Hide my Stories from this person
+      parameters: [{$ref: "#/components/parameters/Login"}]
+      responses: {"204": {description: Hidden}, "404": {$ref: "#/components/responses/Error"}}
+    delete:
+      tags: [graph]
+      summary: Stop hiding
+      parameters: [{$ref: "#/components/parameters/Login"}]
+      responses: {"204": {description: Unhidden}}
+  /mutes:
+    get:
+      tags: [graph]
+      summary: List muted accounts
+      responses: {"200": {description: Muted, content: {application/json: {schema: {$ref: "#/components/schemas/RelationshipPage"}}}}}
+  /blocks:
+    get:
+      tags: [graph]
+      summary: List blocked accounts
+      responses: {"200": {description: Blocked, content: {application/json: {schema: {$ref: "#/components/schemas/RelationshipPage"}}}}}
+  /hides:
+    get:
+      tags: [graph]
+      summary: List accounts hidden from the caller's Stories
+      responses: {"200": {description: Hidden, content: {application/json: {schema: {$ref: "#/components/schemas/RelationshipPage"}}}}}
+
+  /audience-lists:
+    get:
+      tags: [settings]
+      summary: Custom audience lists
+      responses: {"200": {description: Lists, content: {application/json: {schema: {type: object, properties: {lists: {type: array, items: {$ref: "#/components/schemas/AudienceList"}}}}}}}}
+    post:
+      tags: [settings]
+      summary: Create a custom audience list
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [name], properties: {name: {type: string, maxLength: 60}, logins: {type: array, items: {type: string}, maxItems: 500}}}}}
+      responses: {"201": {description: Created, content: {application/json: {schema: {$ref: "#/components/schemas/AudienceList"}}}}}
+  /audience-lists/{listId}:
+    patch:
+      tags: [settings]
+      summary: Rename a list or replace its members
+      parameters: [{name: listId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody:
+        content: {application/json: {schema: {type: object, properties: {name: {type: string, maxLength: 60}, logins: {type: array, items: {type: string}, maxItems: 500}}}}}
+      responses: {"200": {description: Updated, content: {application/json: {schema: {$ref: "#/components/schemas/AudienceList"}}}}}
+    delete:
+      tags: [settings]
+      summary: Delete a list
+      parameters: [{name: listId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {"204": {description: Deleted}}
+
+  /settings:
+    get:
+      tags: [settings]
+      summary: Account settings
+      responses: {"200": {description: Settings, content: {application/json: {schema: {$ref: "#/components/schemas/Settings"}}}}}
+    patch:
+      tags: [settings]
+      summary: Update account settings
+      requestBody: {content: {application/json: {schema: {$ref: "#/components/schemas/SettingsUpdate"}}}}
+      responses: {"200": {description: Updated, content: {application/json: {schema: {$ref: "#/components/schemas/Settings"}}}}}
+  /settings/account:
+    delete:
+      tags: [settings]
+      summary: Delete the caller's Stories account and all their content
+      responses: {"204": {description: Deleted}}
+
+  # -------------------------------------------------------------- moderation
+  /reports:
+    post:
+      tags: [moderation]
+      summary: Report a Story or a user
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/ReportRequest"}}}
+      responses: {"201": {description: Report filed, content: {application/json: {schema: {$ref: "#/components/schemas/Report"}}}}}
+  /moderation/reports:
+    get:
+      tags: [moderation]
+      summary: Moderation queue (moderators only; deny by default)
+      parameters: [{name: state, in: query, schema: {type: string, enum: [open, actioned, dismissed], default: open}}]
+      responses:
+        "200": {description: Queue, content: {application/json: {schema: {type: object, properties: {reports: {type: array, items: {$ref: "#/components/schemas/Report"}}}}}}}
+        "403": {$ref: "#/components/responses/Error"}
+  /moderation/actions:
+    post:
+      tags: [moderation]
+      summary: Take a moderation action (moderators only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: {type: string, enum: [remove_story, suspend_user, unsuspend_user, dismiss_report]}
+                report_id: {type: string, format: uuid}
+                story_id: {type: string, format: uuid}
+                login: {type: string}
+                reason: {type: string, maxLength: 500}
+      responses:
+        "201": {description: Action recorded}
+        "403": {$ref: "#/components/responses/Error"}
+
+components:
+  securitySchemes:
+    storiesSession:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        A revocable Stories session token issued by this service. GitHub
+        credentials are never accepted here and never reach a frontend bundle.
+
+  parameters:
+    StoryId:
+      name: storyId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Login:
+      name: login
+      in: path
+      required: true
+      schema: {type: string, maxLength: 64}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: {type: string, maxLength: 128}
+      description: Retrying a mutation with the same key returns the original result.
+
+  responses:
+    Error:
+      description: Structured error
+      content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string, description: "Stable machine-readable code, e.g. not_found, forbidden, rate_limited, unsupported_media"}
+            message: {type: string}
+            field: {type: string}
+            retry_after_seconds: {type: integer}
+
+    HealthStatus:
+      type: object
+      properties:
+        status: {type: string, enum: [ok, degraded, down]}
+        version: {type: string}
+        commit: {type: string}
+        checks: {type: object, additionalProperties: {type: string}}
+        media_jobs_backlog: {type: integer}
+        oldest_media_job_age_seconds: {type: integer}
+        cleanup_backlog: {type: integer}
+
+    Visibility:
+      type: string
+      description: |
+        followers_of_author — People I follow (signed-in users the author follows)
+        author_follows      — My followers (signed-in users who follow the author)
+        mutuals             — Mutuals
+        custom_list         — Custom list
+        public              — Public, anyone signed in
+      enum: [followers_of_author, author_follows, mutuals, custom_list, public]
+
+    Emoji:
+      type: string
+      enum: ["❤️", "😂", "🔥", "😭", "💀"]
+
+    PublicUser:
+      type: object
+      required: [github_user_id, login, avatar_url, profile_url, has_account]
+      properties:
+        github_user_id: {type: integer, format: int64}
+        login: {type: string}
+        avatar_url: {type: string}
+        profile_url: {type: string}
+        has_account: {type: boolean, description: Whether this identity has an active Stories account}
+
+    Me:
+      type: object
+      required: [user, needs_onboarding]
+      properties:
+        user: {$ref: "#/components/schemas/PublicUser"}
+        needs_onboarding: {type: boolean}
+        is_moderator: {type: boolean}
+        unread_inbox: {type: integer}
+        server_time: {type: string, format: date-time, description: Authoritative server time, used by clients to correct clock skew}
+
+    SessionInfo:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        client_kind: {type: string, enum: [browser_extension, cli, web]}
+        client_label: {type: string}
+        created_at: {type: string, format: date-time}
+        last_used_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        current: {type: boolean}
+
+    PendingLogin:
+      type: object
+      required: [pending_login_id, polling_secret, user_code, verification_url, expires_at, interval_seconds]
+      properties:
+        pending_login_id: {type: string, format: uuid}
+        polling_secret: {type: string, description: Unguessable; sent only to the requesting client}
+        user_code: {type: string, description: Short code the user matches on the approval screen}
+        verification_url: {type: string, description: Public URL the user opens to approve}
+        expires_at: {type: string, format: date-time}
+        interval_seconds: {type: integer}
+
+    PendingLoginPoll:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [pending, approved, denied, expired]}
+        token: {type: string, description: Present exactly once, on the first successful poll after approval}
+        expires_at: {type: string, format: date-time}
+        user: {$ref: "#/components/schemas/PublicUser"}
+
+    ImportSummary:
+      type: object
+      properties:
+        enabled: {type: boolean}
+        preview: {type: boolean}
+        account: {$ref: "#/components/schemas/PublicUser"}
+        github_following_count: {type: integer}
+        added: {type: integer}
+        already_following: {type: integer}
+        skipped_unfollowed: {type: integer, description: Previously unfollowed on Stories; deliberately not resurrected}
+        skipped_blocked: {type: integer}
+        sample: {type: array, items: {$ref: "#/components/schemas/PublicUser"}}
+
+    MediaVariant:
+      type: object
+      required: [kind, url, mime]
+      properties:
+        kind: {type: string, enum: [image, video, poster, thumb, terminal]}
+        url: {type: string, description: Relative authorization-gateway path; never a public object URL}
+        mime: {type: string}
+        width: {type: integer}
+        height: {type: integer}
+        duration_ms: {type: integer}
+        byte_size: {type: integer, format: int64}
+        has_audio: {type: boolean}
+
+    StoryItem:
+      type: object
+      required: [id, author, state]
+      properties:
+        id: {type: string, format: uuid}
+        author: {$ref: "#/components/schemas/PublicUser"}
+        state: {type: string, enum: [processing, published, failed, deleted, removed]}
+        caption: {type: string}
+        alt_text: {type: string, description: Author-supplied accessibility description}
+        visibility: {$ref: "#/components/schemas/Visibility"}
+        audience_list_id: {type: string, format: uuid}
+        audience_label: {type: string, description: Plain-language audience, e.g. "Public — anyone signed in"}
+        allow_replies: {type: boolean}
+        allow_reactions: {type: boolean}
+        media_kind: {type: string, enum: [image, video]}
+        variants: {type: array, items: {$ref: "#/components/schemas/MediaVariant"}}
+        published_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time, description: Exactly published_at + 24h in server time}
+        seen: {type: boolean, description: Whether the caller has already viewed this item}
+        is_owner: {type: boolean}
+        viewer_count: {type: integer, description: Author only}
+        reaction_count: {type: integer, description: Author only}
+        my_reaction: {$ref: "#/components/schemas/Emoji"}
+        failure_code: {type: string}
+        failure_message: {type: string}
+
+    AuthorGroup:
+      type: object
+      required: [author, items]
+      properties:
+        author: {$ref: "#/components/schemas/PublicUser"}
+        items: {type: array, items: {$ref: "#/components/schemas/StoryItem"}}
+        has_unseen: {type: boolean}
+        muted: {type: boolean}
+        follow_provenance: {type: string, enum: [github_import, stories_native, self]}
+
+    Feed:
+      type: object
+      required: [groups, server_time]
+      properties:
+        me: {$ref: "#/components/schemas/AuthorGroup"}
+        groups: {type: array, items: {$ref: "#/components/schemas/AuthorGroup"}}
+        next_cursor: {type: string}
+        server_time: {type: string, format: date-time}
+        version: {type: string, description: Opaque change token for cheap polling}
+
+    RingStatus:
+      type: object
+      required: [github_user_id, has_active]
+      properties:
+        github_user_id: {type: integer, format: int64}
+        login: {type: string}
+        has_active: {type: boolean, description: False both for "no Story" and "not authorized" — deliberately indistinguishable}
+        has_unseen: {type: boolean}
+        muted: {type: boolean}
+        is_self: {type: boolean}
+
+    UploadIntentRequest:
+      type: object
+      required: [mime, byte_size]
+      properties:
+        mime: {type: string, description: Declared type; the server verifies the real signature during processing}
+        byte_size: {type: integer, format: int64}
+        filename: {type: string, description: Advisory only; never used to build an object key or a shell argument}
+        caption: {type: string, maxLength: 500}
+        alt_text: {type: string, maxLength: 500}
+        visibility: {$ref: "#/components/schemas/Visibility"}
+        audience_list_id: {type: string, format: uuid}
+        allow_replies: {type: boolean}
+        allow_reactions: {type: boolean}
+
+    UploadIntent:
+      type: object
+      required: [upload_id, method, url, expires_at, max_bytes]
+      properties:
+        upload_id: {type: string, format: uuid}
+        method: {type: string, enum: [PUT]}
+        url: {type: string, description: Short-lived authorization for exactly one server-chosen private object key}
+        headers: {type: object, additionalProperties: {type: string}}
+        expires_at: {type: string, format: date-time}
+        max_bytes: {type: integer, format: int64}
+
+    StoryUpdate:
+      type: object
+      properties:
+        caption: {type: string, maxLength: 500}
+        alt_text: {type: string, maxLength: 500}
+        visibility: {$ref: "#/components/schemas/Visibility"}
+        audience_list_id: {type: string, format: uuid}
+        allow_replies: {type: boolean}
+        allow_reactions: {type: boolean}
+
+    ViewerList:
+      type: object
+      properties:
+        story_id: {type: string, format: uuid}
+        total: {type: integer}
+        viewers:
+          type: array
+          items:
+            type: object
+            properties:
+              user: {$ref: "#/components/schemas/PublicUser"}
+              viewed_at: {type: string, format: date-time}
+              reaction: {$ref: "#/components/schemas/Emoji"}
+
+    Reaction:
+      type: object
+      properties:
+        story_id: {type: string, format: uuid}
+        emoji: {$ref: "#/components/schemas/Emoji"}
+        created_at: {type: string, format: date-time}
+
+    Reply:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        story_id: {type: string, format: uuid}
+        sender: {$ref: "#/components/schemas/PublicUser"}
+        recipient: {$ref: "#/components/schemas/PublicUser"}
+        body: {type: string}
+        created_at: {type: string, format: date-time}
+        read_at: {type: string, format: date-time}
+        story_expired: {type: boolean, description: Context replaced with "Story expired"; no media is retained}
+
+    InboxEntry:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [reply, reaction, follow]}
+        actor: {$ref: "#/components/schemas/PublicUser"}
+        story_id: {type: string, format: uuid}
+        story_expired: {type: boolean}
+        story_thumb_url: {type: string, description: Authorization-gateway path; absent once the Story expired}
+        body: {type: string}
+        emoji: {$ref: "#/components/schemas/Emoji"}
+        created_at: {type: string, format: date-time}
+        read_at: {type: string, format: date-time}
+        outgoing: {type: boolean}
+
+    Inbox:
+      type: object
+      properties:
+        entries: {type: array, items: {$ref: "#/components/schemas/InboxEntry"}}
+        unread: {type: integer}
+        next_cursor: {type: string}
+
+    Relationship:
+      type: object
+      properties:
+        user: {$ref: "#/components/schemas/PublicUser"}
+        provenance: {type: string, enum: [github_import, stories_native]}
+        created_at: {type: string, format: date-time}
+        follows_me: {type: boolean}
+        muted: {type: boolean}
+        blocked: {type: boolean}
+        hidden: {type: boolean}
+
+    RelationshipPage:
+      type: object
+      properties:
+        relationships: {type: array, items: {$ref: "#/components/schemas/Relationship"}}
+        next_cursor: {type: string}
+        total: {type: integer}
+
+    AudienceList:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        members: {type: array, items: {$ref: "#/components/schemas/PublicUser"}}
+        member_count: {type: integer}
+
+    Settings:
+      type: object
+      properties:
+        default_visibility: {$ref: "#/components/schemas/Visibility"}
+        default_audience_list_id: {type: string, format: uuid}
+        default_allow_replies: {type: boolean}
+        default_allow_reactions: {type: boolean}
+        audience_lists: {type: array, items: {$ref: "#/components/schemas/AudienceList"}}
+        hidden_from: {type: array, items: {$ref: "#/components/schemas/PublicUser"}}
+        muted: {type: array, items: {$ref: "#/components/schemas/PublicUser"}}
+        blocked: {type: array, items: {$ref: "#/components/schemas/PublicUser"}}
+        sessions: {type: array, items: {$ref: "#/components/schemas/SessionInfo"}}
+        reply_retention_days: {type: integer}
+
+    SettingsUpdate:
+      type: object
+      properties:
+        default_visibility: {$ref: "#/components/schemas/Visibility"}
+        default_audience_list_id: {type: string, format: uuid}
+        default_allow_replies: {type: boolean}
+        default_allow_reactions: {type: boolean}
+
+    ReportRequest:
+      type: object
+      required: [subject_kind, reason]
+      properties:
+        subject_kind: {type: string, enum: [story, user]}
+        story_id: {type: string, format: uuid}
+        login: {type: string}
+        reason: {type: string, enum: [spam, harassment, nudity, violence, self_harm, illegal, other]}
+        details: {type: string, maxLength: 1000}
+
+    Report:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        subject_kind: {type: string, enum: [story, user]}
+        story_id: {type: string, format: uuid}
+        subject: {$ref: "#/components/schemas/PublicUser"}
+        reporter: {$ref: "#/components/schemas/PublicUser"}
+        reason: {type: string}
+        details: {type: string}
+        state: {type: string, enum: [open, actioned, dismissed]}
+        created_at: {type: string, format: date-time}

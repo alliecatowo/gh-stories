@@ -1,0 +1,49 @@
+name: gh-stories-local
+
+services:
+  postgres:
+    image: postgres:18.6-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: stories
+      POSTGRES_PASSWORD: stories_local_dev
+      POSTGRES_DB: stories
+    ports: ["55432:5432"]
+    # PostgreSQL 18+ expects the data mount one level above /data.
+    volumes: ["pgdata:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stories -d stories"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":55902"
+    environment:
+      MINIO_ROOT_USER: storiesminio
+      MINIO_ROOT_PASSWORD: storiesminio_local_dev
+    ports: ["55900:9000", "55902:55902"]
+    volumes: ["miniodata:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  createbuckets:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio: {condition: service_healthy}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 storiesminio storiesminio_local_dev &&
+      mc mb --ignore-existing local/stories-media &&
+      mc anonymous set none local/stories-media &&
+      echo 'bucket ready (private)';
+      "
+
+volumes:
+  pgdata:
+  miniodata:

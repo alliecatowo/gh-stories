@@ -1,0 +1,37 @@
+# --- local configuration & credentials -------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# --- build output ----------------------------------------------------------
+/gh-stories            # root executable for `gh extension install .` (generated)
+/gh-stories.exe
+/dist/
+/bin/
+**/.output/
+**/.wxt/
+**/dist/
+**/node_modules/
+apps/site/.astro/
+
+# --- Go --------------------------------------------------------------------
+*.test
+*.out
+coverage.*
+
+# --- test & capture artifacts ----------------------------------------------
+/evidence/raw/
+/test-results/
+/playwright-report/
+/blob-report/
+**/.playwright/
+tests/e2e/.auth/
+*.log
+
+# --- OS / editor -----------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/

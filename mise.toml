@@ -1,0 +1,105 @@
+#:schema https://mise.jdx.dev/schema/mise.json
+# GitHub Stories — mise owns the developer workflow.
+# System prerequisites that mise does NOT install are listed in docs/prerequisites.md
+# (container engine, ffmpeg, graphical terminal, browser libraries).
+
+[tools]
+go    = "1.26.5"
+node  = "24.21.0"
+pnpm  = "11.20.0"
+
+[env]
+_.file = [".env"]
+GHS_REPO_ROOT = "{{config_root}}"
+GOTOOLCHAIN = "local"
+
+[settings]
+experimental = true
+
+# ---------------------------------------------------------------- diagnostics
+[tasks.doctor]
+description = "Report required tools, versions, ports, config, capabilities, credentials"
+run = "bash scripts/doctor.sh"
+
+[tasks.bootstrap]
+description = "Install project + browser test dependencies; prepare local config (idempotent)"
+run = "bash scripts/bootstrap.sh"
+
+# ---------------------------------------------------------------- local stack
+[tasks."infra:up"]
+description = "Start local PostgreSQL + MinIO via Docker Compose"
+run = "bash scripts/infra.sh up"
+
+[tasks."infra:down"]
+description = "Stop the local PostgreSQL + MinIO stack"
+run = "bash scripts/infra.sh down"
+
+[tasks."db:migrate"]
+description = "Apply versioned migrations safely"
+run = "bash scripts/db.sh migrate"
+
+[tasks."db:reset"]
+description = "Drop and recreate the LOCAL database, then migrate"
+run = "bash scripts/db.sh reset"
+
+[tasks.seed]
+description = "Idempotently seed an explicitly local/test environment"
+run = "bash scripts/seed.sh"
+
+[tasks.dev]
+description = "Start local stack, migrations, API, worker and client dev processes"
+run = "bash scripts/dev.sh"
+
+[tasks.demo]
+description = "Start a fully functional local demo with deterministic sample accounts and media"
+run = "bash scripts/demo.sh"
+
+# ---------------------------------------------------------------- quality
+[tasks.check]
+description = "Format verification, lint, type checks, contract checks, static analysis"
+run = "bash scripts/check.sh"
+
+[tasks.fmt]
+description = "Format Go and TypeScript sources in place"
+run = "bash scripts/fmt.sh"
+
+[tasks.test]
+description = "Unit and real-service integration tests"
+run = "bash scripts/test.sh"
+
+[tasks."test:e2e"]
+description = "Browser extension and cross-client behavioral scenarios"
+run = "bash scripts/test-e2e.sh"
+
+[tasks."test:visual"]
+description = "Reproducible visual capture/regression workflow"
+run = "bash scripts/test-visual.sh"
+
+[tasks."test:terminal"]
+description = "PTY interaction tests and supported graphical-terminal checks"
+run = "bash scripts/test-terminal.sh"
+
+# ---------------------------------------------------------------- build/ship
+[tasks.build]
+description = "Production builds of all components"
+run = "bash scripts/build.sh"
+
+[tasks.package]
+description = "Release binaries, extension archives, service image, checksums, metadata"
+run = "bash scripts/package.sh"
+
+[tasks."site:preview"]
+description = "Serve the production static output with the correct project subpath"
+run = "bash scripts/site-preview.sh"
+
+[tasks.capture]
+description = "Regenerate reviewable screenshots and launch recordings from the running product"
+run = "bash scripts/capture.sh"
+
+[tasks.verify]
+description = "Run the required local release gates and summarize their actual results"
+run = "bash scripts/verify.sh"
+
+[tasks.release]
+description = "Validate the intended version and execute the authorized release process"
+run = "bash scripts/release.sh"

@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest something for GitHub Stories
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One question decides most of these: **would an ordinary Stories product have this?**
+        If the reason starts with "developers could use it to…", it is probably out of scope.
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like to be able to do?
+    validations: {required: true}
+  - type: textarea
+    id: ordinary
+    attributes:
+      label: Which ordinary Stories product does this, and how?
+    validations: {required: true}
