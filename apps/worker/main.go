@@ -6,6 +6,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -18,10 +20,21 @@ import (
 	"github.com/alliecatowo/gh-stories/internal/media"
 	"github.com/alliecatowo/gh-stories/internal/objstore"
 	"github.com/alliecatowo/gh-stories/internal/store"
+	"github.com/alliecatowo/gh-stories/internal/version"
 	"github.com/alliecatowo/gh-stories/internal/worker"
 )
 
 func main() {
+	// -version must work without any configuration at all, so that an
+	// operator (or a release gate) can identify an image without first
+	// supplying a database and object store.
+	showVersion := flag.Bool("version", false, "print version and exit")
+	flag.Parse()
+	if *showVersion {
+		fmt.Println("gh-stories worker", version.Short(), version.BuildDate)
+		return
+	}
+
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	cfg, err := config.Load()

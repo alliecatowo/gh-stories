@@ -1,0 +1,56 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/site/**"
+      - "packages/ui/**"
+      - "packages/contracts/**"
+      - "docs/media/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.9.3
+          experimental: true
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - run: mise exec -- pnpm install --frozen-lockfile
+      - run: mise exec -- pnpm --filter @gh-stories/site run build
+
+      - name: Every internal link must carry the project subpath
+        run: |
+          # A link that works at / but 404s at /gh-stories/ is a release
+          # blocker, so fail the deploy rather than publish it.
+          if grep -rEo 'href="/[^"]*"' apps/site/dist --include='*.html' \
+               | grep -v 'href="/gh-stories' | grep -v 'href="//' ; then
+            echo "::error::found absolute links missing the /gh-stories base path"
+            exit 1
+          fi
+          echo "base path OK"
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: apps/site/dist
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

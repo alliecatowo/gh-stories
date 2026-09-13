@@ -1,0 +1,16 @@
+.git
+.github
+node_modules
+**/node_modules
+dist
+**/.output
+**/.wxt
+apps/site/dist
+evidence
+docs/media
+.env
+.env.*
+!.env.example
+gh-stories
+*.log
+tests/terminal
