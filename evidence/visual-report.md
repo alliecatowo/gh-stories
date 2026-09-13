@@ -3,7 +3,7 @@
 Everything below was **run and then looked at**. A capture nobody inspected is
 not evidence, so each item says what was seen and what was wrong with it.
 
-- **Commit under test:** `92d2aa1` (release `v0.1.0`)
+- **Commits under test:** `92d2aa1` (release `v0.1.0`) and `9d83fa6` (release `v0.2.0`, inline video)
 - **Published artifacts exercised:** `gh-stories_v0.1.0_linux-arm64` from the
   GitHub Release (SHA-256 verified against `checksums.txt`) and
   `ghcr.io/alliecatowo/gh-stories:v0.1.0` pulled anonymously from GHCR.
@@ -32,8 +32,29 @@ implementation of the Kitty graphics protocol, and that is what was used.
 | Story sequence, dev build | `terminal/terminal-story-sequence.png` | A portrait cat photo, centred, aspect preserved, not cropped. | ✅ |
 | Next-item cleanup | same capture, after a fix | **Defect found.** The first capture showed the *previous* image still on screen above the current one. The clear escape was emitted from an async command that could land after the replacement was drawn. Fixed by emitting the delete in the same write as the new placement, and by skipping re-transmission when the picture and geometry are unchanged. Re-captured: one image. | ✅ after fix |
 | Small window (54×18) | `terminal/terminal-small-window.png` | Image scaled down proportionally, layout intact, key hints truncated with `…`. | ✅ |
+| **Inline video** | `terminal/inline-video-frame-{a,b}.png` | A Story's video playing as moving pixels in kitty: ~120,000 pixels changed between captures 0.35 s apart across five consecutive intervals, and the zoom has visibly advanced between the two saved frames. | ✅ |
 | Unsupported terminal fallback | `terminal/terminal-fallback.png` | `[image] · 1080×1920 · 0.3 MB`, the author's accessibility description, the explicit reason (`renderer forced via override`), and `Press Enter to open it in your browser.` It never implies a picture is on screen. | ✅ |
 | Viewer ends after the last item | observed during capture | The viewer exits cleanly when a sequence finishes. Initially looked like a blank-capture bug; it is correct behaviour, and the capture was simply taken after the sequence ended. | ✅ |
+
+### What inline video cost to get right
+
+Four things had to be discovered by driving a real terminal, because the
+obvious reading of the kitty specification does not work:
+
+1. The image must be addressed by **number** (`I=`), not id (`i=`). With `i=`,
+   kitty replied `r=2` to every appended frame — each one overwriting the last.
+2. Frame pixels must arrive **atomically as a file** (`t=f`). Chunked inline
+   transmission reproduced the same overwrite. This is also exactly why inline
+   video cannot work over SSH.
+3. `q=2` suppresses **error** replies as well as OK, which hid both of the
+   above. `GHS_DEBUG_ANIMATION=1` now turns errors back on.
+4. The escapes must reach the terminal directly rather than through Bubble
+   Tea's line-diffing renderer, and the poster frame placed while the video was
+   decoding has to be cleared first — otherwise it sits on top and a playing
+   video looks like a still.
+
+The working sequence was recovered by capturing what kitty's own `icat` emits
+for an animated GIF, and is now pinned by tests.
 
 Not captured, and therefore **not claimed**: iTerm2, WezTerm, Ghostty,
 Terminal.app, Windows Terminal, tmux passthrough, SSH. See
