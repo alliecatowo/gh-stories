@@ -1,0 +1,10 @@
+{{define "signin.html"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+<h1>Sign in</h1>
+<p>GitHub Stories uses your GitHub account for identity. It never posts to GitHub, never changes who you follow there, and never requests access to your repositories.</p>
+{{if .OAuthReady}}
+<div class="card"><a href="/login"><button class="primary">Continue with GitHub</button></a></div>
+{{else}}
+<div class="card err">GitHub sign-in is not configured on this service.</div>
+{{end}}
+{{end}}

@@ -1,0 +1,19 @@
+{{define "authorize.html"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+<h1>Authorize a device</h1>
+{{if .Data}}
+<p>A client is asking to sign in to GitHub Stories as <b>{{.User.Login}}</b>.</p>
+<div class="card">
+  <p style="margin-top:0"><b>Requesting client</b><br>{{if .Data.Pending.ClientLabel}}{{.Data.Pending.ClientLabel}}{{else}}{{.Data.Pending.ClientKind}}{{end}}</p>
+  <p><b>Confirm this code matches the one shown in your terminal</b></p>
+  <div class="code">{{.Data.Pending.UserCode}}</div>
+  <p class="muted">If these do not match, deny this request. Someone else may have started it.</p>
+  <form method="post" action="/account/authorize">
+    <input type="hidden" name="request" value="{{.Data.RequestID}}">
+    <input type="hidden" name="user_code" value="{{.Data.Pending.UserCode}}">
+    <button class="primary" name="action" value="approve">Approve</button>
+    <button name="action" value="deny">Deny</button>
+  </form>
+</div>
+{{end}}
+{{end}}

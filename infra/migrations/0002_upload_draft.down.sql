@@ -1,0 +1,1 @@
+ALTER TABLE upload_intents DROP COLUMN IF EXISTS draft, DROP COLUMN IF EXISTS filename;

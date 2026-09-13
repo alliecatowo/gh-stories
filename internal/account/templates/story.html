@@ -1,0 +1,17 @@
+{{define "story.html"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+<h1>{{.Data.Item.Author.Login}}</h1>
+<p>{{relative .Data.Item.PublishedAt}} · disappears {{.Data.Expires.Format "2 Jan 15:04 MST"}}</p>
+<div class="card" style="padding:0;overflow:hidden;background:#000">
+{{if .Data.IsVideo}}
+  <video controls playsinline preload="metadata" poster="{{.Data.Poster}}" style="display:block;width:100%;max-height:80vh;object-fit:contain"{{if .Data.Item.AltText}} aria-label="{{.Data.Item.AltText}}"{{end}}>
+    <source src="{{.Data.MediaURL}}" type="video/mp4">
+    Your browser cannot play this video.
+  </video>
+{{else}}
+  <img src="{{.Data.MediaURL}}" alt="{{if .Data.Item.AltText}}{{.Data.Item.AltText}}{{else}}Story by {{.Data.Item.Author.Login}}{{end}}" style="display:block;width:100%;max-height:80vh;object-fit:contain">
+{{end}}
+</div>
+{{if .Data.Item.Caption}}<p style="color:var(--fg)">{{.Data.Item.Caption}}</p>{{end}}
+{{if .Data.Item.AltText}}<p class="muted">Description: {{.Data.Item.AltText}}</p>{{end}}
+{{end}}

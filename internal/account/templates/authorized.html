@@ -1,0 +1,10 @@
+{{define "authorized.html"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+{{if .Data.Approved}}
+<h1>Device authorized</h1>
+<p>You can go back to your terminal. You can revoke this session at any time from <a href="/account/settings">Settings</a>.</p>
+{{else}}
+<h1>Request denied</h1>
+<p>Nothing was authorized.</p>
+{{end}}
+{{end}}

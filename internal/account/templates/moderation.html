@@ -1,0 +1,16 @@
+{{define "moderation.html"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+<h1>Moderation queue</h1>
+<p>{{len .Data.Reports}} open report(s).</p>
+<table>
+<tr><th>Subject</th><th>Reason</th><th>Reported by</th><th>When</th></tr>
+{{range .Data.Reports}}
+<tr>
+  <td>{{.SubjectKind}}{{if .Subject}} · {{.Subject.Login}}{{end}}</td>
+  <td>{{.Reason}}</td><td>{{.Reporter.Login}}</td>
+  <td>{{.CreatedAt.Format "2 Jan 15:04"}}</td>
+</tr>
+{{end}}
+</table>
+<p class="muted">Actions are taken through the API so they are always recorded with a moderator and a reason.</p>
+{{end}}

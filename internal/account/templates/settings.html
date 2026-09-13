@@ -1,0 +1,18 @@
+{{define "settings.html"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+<h1>Settings</h1>
+<h2>Active sessions</h2>
+<p>Each of these can be revoked independently.</p>
+<table>
+<tr><th>Client</th><th>Last used</th><th>Expires</th></tr>
+{{range .Data.Sessions}}<tr><td>{{.ClientKind}}{{if .ClientLabel}} · {{.ClientLabel}}{{end}}</td><td>{{relative (.LastUsedAt | ptr)}}</td><td>{{.ExpiresAt.Format "2 Jan 2006"}}</td></tr>{{end}}
+</table>
+<h2>Hidden from</h2>
+{{if .Data.Hidden}}<ul class="plain">{{range .Data.Hidden}}<li><img class="avatar" src="{{.AvatarURL}}" alt=""> {{.Login}}</li>{{end}}</ul>{{else}}<p>Nobody.</p>{{end}}
+<h2>Muted</h2>
+{{if .Data.Muted}}<ul class="plain">{{range .Data.Muted}}<li><img class="avatar" src="{{.AvatarURL}}" alt=""> {{.Login}}</li>{{end}}</ul>{{else}}<p>Nobody.</p>{{end}}
+<h2>Blocked</h2>
+{{if .Data.Blocked}}<ul class="plain">{{range .Data.Blocked}}<li><img class="avatar" src="{{.AvatarURL}}" alt=""> {{.Login}}</li>{{end}}</ul>{{else}}<p>Nobody.</p>{{end}}
+<h2>Retention</h2>
+<p>Stories disappear 24 hours after publication. Private replies are kept for {{.Data.ReplyRetentionDays}} days and then deleted. Viewer records are deleted on a short schedule. Pixels already delivered to someone's device cannot be recalled.</p>
+{{end}}

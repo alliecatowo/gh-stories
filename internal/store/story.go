@@ -421,3 +421,66 @@ func (s *Store) scheduleStoryObjectCleanup(ctx context.Context, tx pgx.Tx, story
 		FROM media_variants WHERE story_item_id = $1::uuid`, storyID, s.Clock.Now())
 	return wrap("schedule object cleanup", err)
 }
+
+// draftRecord is the on-disk form of the metadata captured at upload-intent
+// time. Storing it server side means the finalize call carries no audience at
+// all, so a hostile client cannot widen the audience between authorizing an
+// upload and completing it.
+type draftRecord struct {
+	Caption        string  `json:"caption"`
+	AltText        string  `json:"alt_text"`
+	Visibility     string  `json:"visibility"`
+	AudienceListID *string `json:"audience_list_id,omitempty"`
+	AllowReplies   bool    `json:"allow_replies"`
+	AllowReactions bool    `json:"allow_reactions"`
+}
+
+// StashDraft records the intended Story metadata against an upload intent.
+func (s *Store) StashDraft(ctx context.Context, uploadID uuid.UUID, d StoryDraft, filename string) error {
+	rec := draftRecord{
+		Caption: d.Caption, AltText: d.AltText, Visibility: string(d.Visibility),
+		AllowReplies: d.AllowReplies, AllowReactions: d.AllowReactions,
+	}
+	if d.AudienceListID != nil {
+		id := d.AudienceListID.String()
+		rec.AudienceListID = &id
+	}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx,
+		`UPDATE upload_intents SET draft = $2::jsonb, filename = $3 WHERE id = $1`,
+		uploadID, raw, filename)
+	return wrap("stash draft", err)
+}
+
+// LoadDraft reads back the metadata captured at upload-intent time.
+func (s *Store) LoadDraft(ctx context.Context, uploadID uuid.UUID) (StoryDraft, string, error) {
+	var raw []byte
+	var filename string
+	if err := s.pool.QueryRow(ctx,
+		`SELECT draft, filename FROM upload_intents WHERE id = $1`, uploadID).
+		Scan(&raw, &filename); err != nil {
+		return StoryDraft{}, "", norm(err)
+	}
+	var rec draftRecord
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		return StoryDraft{}, "", wrap("decode draft", err)
+	}
+	d := StoryDraft{
+		Caption: rec.Caption, AltText: rec.AltText,
+		Visibility:     domain.Visibility(rec.Visibility),
+		AllowReplies:   rec.AllowReplies,
+		AllowReactions: rec.AllowReactions,
+	}
+	if !d.Visibility.Valid() {
+		d.Visibility = domain.VisibilityFollowersOfAuthor
+	}
+	if rec.AudienceListID != nil {
+		if id, err := uuid.Parse(*rec.AudienceListID); err == nil {
+			d.AudienceListID = &id
+		}
+	}
+	return d, filename, nil
+}

@@ -1,0 +1,21 @@
+{{define "home.html"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+<h1>Your Stories</h1>
+<p>Every item disappears 24 hours after it was published. {{with .Data.Unread}}{{if gt . 0}}You have {{.}} unread in your inbox.{{end}}{{end}}</p>
+{{if .Data.Items}}
+<ul class="plain">
+{{range .Data.Items}}
+  <li>
+    <span>{{if eq (printf "%s" .State) "published"}}●{{else}}○{{end}}</span>
+    <span><b>{{.Visibility | label}}</b> · {{relative .PublishedAt}}
+      {{if .Caption}}<br><span class="muted">{{.Caption}}</span>{{end}}
+      {{if ne (printf "%s" .State) "published"}}<br><span class="muted">{{.State}}{{if .FailureMessage}} — {{.FailureMessage}}{{end}}</span>{{end}}
+    </span>
+    {{if eq (printf "%s" .State) "published"}}<a style="margin-left:auto" href="/s/{{.ID}}">Open</a>{{end}}
+  </li>
+{{end}}
+</ul>
+{{else}}
+<div class="card">Nothing right now. Post one with <code>gh stories post cat.jpg</code> or from the browser extension.</div>
+{{end}}
+{{end}}
