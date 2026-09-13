@@ -9,6 +9,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strconv"
@@ -148,6 +149,30 @@ func (w *Worker) Run(ctx context.Context) error {
 	wg.Wait()
 	w.log.Info("worker stopped", "worker_id", w.cfg.WorkerID)
 	return nil
+}
+
+// ProcessOneMediaJob claims and fully handles at most one due media job,
+// synchronously. It reports false if no job was due. This is what Run's
+// media loop calls in a cycle; it is exported separately so tests and
+// operational tooling can drive the pipeline deterministically one job at a
+// time instead of racing a background poll loop.
+func (w *Worker) ProcessOneMediaJob(ctx context.Context) (bool, error) {
+	job, err := w.store.ClaimMediaJob(ctx, w.cfg.WorkerID, w.cfg.MediaLeaseDuration)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	w.handleMediaJob(ctx, job)
+	return true, nil
+}
+
+// RunCleanupOnce runs a single synchronous cleanup pass: the expiry/GC/purge
+// sweeps plus draining the delete_objects backlog. Exported for the same
+// reason as ProcessOneMediaJob.
+func (w *Worker) RunCleanupOnce(ctx context.Context) {
+	w.runCleanupPass(ctx)
 }
 
 // sleep waits for d or until ctx is done, whichever comes first, so a poll

@@ -1,0 +1,36 @@
+---
+import { withBase } from '../lib/base';
+import ThemeToggle from './ThemeToggle.astro';
+
+interface Props {
+  currentPath: string;
+}
+const { currentPath } = Astro.props;
+
+const links = [
+  { href: '/demo/', label: 'Demo' },
+  { href: '/docs/install/', label: 'Install' },
+  { href: '/docs/support/', label: 'Support' },
+  { href: '/docs/privacy/', label: 'Privacy' },
+  { href: '/docs/self-hosting/', label: 'Self-hosting' },
+];
+---
+
+<header class="site-header">
+  <a class="site-header__brand" href={withBase('/')}>
+    <img src={withBase('/favicon.svg')} alt="" width="24" height="24" />
+    <span>GitHub Stories</span>
+  </a>
+  <nav class="site-header__nav" aria-label="Primary">
+    {
+      links.map((link) => (
+        <a href={withBase(link.href)} aria-current={currentPath === link.href ? 'page' : undefined}>
+          {link.label}
+        </a>
+      ))
+    }
+  </nav>
+  <div class="site-header__actions">
+    <ThemeToggle />
+  </div>
+</header>

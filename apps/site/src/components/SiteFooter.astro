@@ -1,0 +1,40 @@
+---
+import { withBase } from '../lib/base';
+
+const REPO = 'https://github.com/alliecatowo/gh-stories';
+---
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="site-footer__grid">
+      <div>
+        <h2>Project</h2>
+        <ul>
+          <li><a href={REPO}>Source</a></li>
+          <li><a href={`${REPO}/releases`}>Releases</a></li>
+          <li><a href={`${REPO}/issues`}>Issues</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Docs</h2>
+        <ul>
+          <li><a href={withBase('/docs/install/')}>Install</a></li>
+          <li><a href={withBase('/docs/support/')}>Support matrix</a></li>
+          <li><a href={withBase('/docs/self-hosting/')}>Self-hosting</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Trust</h2>
+        <ul>
+          <li><a href={withBase('/docs/privacy/')}>Privacy &amp; retention</a></li>
+          <li><a href={`${REPO}/blob/main/SECURITY.md`}>Security policy</a></li>
+          <li><a href={`${REPO}/blob/main/LICENSE`}>License (MIT)</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="site-footer__disclaimer">
+      GitHub Stories is an independent project. It is not affiliated with, endorsed by, or
+      sponsored by GitHub, GitHub Inc., or Microsoft.
+    </p>
+  </div>
+</footer>

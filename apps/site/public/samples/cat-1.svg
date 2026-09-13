@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" role="img" aria-label="Illustrated scene: a cat sitting inside a cardboard box.">
+  <rect width="800" height="1000" fill="#fbeee0"/>
+  <g fill="#d9a066">
+    <rect x="180" y="620" width="440" height="260" rx="10"/>
+    <polygon points="180,620 400,560 620,620" fill="#c98a4b"/>
+  </g>
+  <g fill="#2d2320">
+    <polygon points="300,440 340,340 380,450"/>
+    <polygon points="420,450 460,340 500,440"/>
+    <ellipse cx="400" cy="540" rx="130" ry="120"/>
+  </g>
+  <g fill="#fbeee0">
+    <circle cx="360" cy="540" r="10"/>
+    <circle cx="440" cy="540" r="10"/>
+    <path d="M385 575 q15 14 30 0" stroke="#fbeee0" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </g>
+  <g stroke="#2d2320" stroke-width="3" stroke-linecap="round" opacity="0.7">
+    <line x1="300" y1="560" x2="220" y2="550"/>
+    <line x1="300" y1="575" x2="220" y2="580"/>
+    <line x1="500" y1="560" x2="580" y2="550"/>
+    <line x1="500" y1="575" x2="580" y2="580"/>
+  </g>
+</svg>

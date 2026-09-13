@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" role="img" aria-label="Text card: 'the box is mine now.' on an amber to cream gradient.">
+  <defs>
+    <linearGradient id="cardGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0883e"/>
+      <stop offset="100%" stop-color="#fbeee0"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1000" fill="url(#cardGrad2)"/>
+  <text x="400" y="450" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="56" font-weight="700" fill="#2d2320">the box</text>
+  <text x="400" y="520" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="56" font-weight="700" fill="#2d2320">is mine now.</text>
+</svg>

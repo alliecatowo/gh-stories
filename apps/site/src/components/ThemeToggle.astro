@@ -1,0 +1,52 @@
+---
+// Cycles Automatic (follows prefers-color-scheme) -> Light -> Dark -> Automatic.
+// Persists the manual choice; "Automatic" clears the override.
+---
+
+<button
+  type="button"
+  id="ghs-theme-toggle"
+  class="theme-toggle"
+  aria-label="Color mode: automatic. Activate to change."
+>
+  <span aria-hidden="true">◐</span>
+</button>
+
+<script>
+  const STORAGE_KEY = 'ghs-color-mode';
+  const ORDER = ['auto', 'light', 'dark'] as const;
+  const GLYPH: Record<(typeof ORDER)[number], string> = { auto: '◐', light: '☀', dark: '☾' };
+  const LABEL: Record<(typeof ORDER)[number], string> = {
+    auto: 'Color mode: automatic. Activate to change.',
+    light: 'Color mode: light. Activate to change.',
+    dark: 'Color mode: dark. Activate to change.',
+  };
+
+  function currentMode(): (typeof ORDER)[number] {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === 'dark' || stored === 'light' ? stored : 'auto';
+  }
+
+  function apply(mode: (typeof ORDER)[number]) {
+    if (mode === 'auto') {
+      document.documentElement.removeAttribute('data-color-mode');
+      localStorage.removeItem(STORAGE_KEY);
+    } else {
+      document.documentElement.setAttribute('data-color-mode', mode);
+      localStorage.setItem(STORAGE_KEY, mode);
+    }
+    const button = document.getElementById('ghs-theme-toggle');
+    if (button) {
+      button.setAttribute('aria-label', LABEL[mode]);
+      const glyph = button.querySelector('span');
+      if (glyph) glyph.textContent = GLYPH[mode];
+    }
+  }
+
+  const button = document.getElementById('ghs-theme-toggle');
+  apply(currentMode());
+  button?.addEventListener('click', () => {
+    const next = ORDER[(ORDER.indexOf(currentMode()) + 1) % ORDER.length];
+    apply(next);
+  });
+</script>

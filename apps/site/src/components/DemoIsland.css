@@ -1,0 +1,217 @@
+.demo-island {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ghs-space-4);
+}
+
+.demo-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ghs-space-3);
+}
+
+.demo-toolbar__presentation {
+  display: inline-flex;
+  border: 1px solid var(--ghs-border-default);
+  border-radius: var(--ghs-radius-full);
+  padding: 3px;
+  gap: 2px;
+}
+
+.demo-toolbar__tab {
+  border: 0;
+  background: transparent;
+  color: var(--ghs-fg-muted);
+  padding: var(--ghs-space-1) var(--ghs-space-4);
+  border-radius: var(--ghs-radius-full);
+  font-size: var(--ghs-font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.demo-toolbar__tab[data-active] {
+  background: var(--ghs-canvas-subtle);
+  color: var(--ghs-fg-default);
+}
+
+.demo-hint {
+  margin: 0;
+  font-size: var(--ghs-font-size-sm);
+  color: var(--ghs-fg-muted);
+}
+
+.demo-note {
+  border-left: 3px solid var(--ghs-ring-unseen-end);
+  background: var(--ghs-canvas-subtle);
+  border-radius: 0 var(--ghs-radius-md) var(--ghs-radius-md) 0;
+  padding: var(--ghs-space-3) var(--ghs-space-4);
+  color: var(--ghs-fg-default);
+  font-size: var(--ghs-font-size-sm);
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- terminal frame
+ * Reuses the real @gh-stories/ui StoryViewer, but the shipped component is
+ * built to be a fixed, full-viewport dialog (see StoryViewer.css:
+ * `.ghs-viewer { position: fixed; inset: 0 }` and a `__frame` sized with
+ * `min(100vw, …)` / `min(100vh, …)`). Viewport units always resolve against
+ * the real browser viewport, never a containing block, so nesting the
+ * viewer inside a small terminal-shaped box needs these two overrides:
+ * `position: fixed` -> `absolute` (relative to this positioned frame
+ * instead of the viewport), and the frame's viewport-unit sizing ->
+ * percentages of this same box. */
+.demo-terminal-frame {
+  background: #0d1117;
+  border-radius: var(--ghs-radius-md);
+  overflow: hidden;
+  border: 1px solid var(--ghs-border-default);
+}
+
+.demo-terminal-frame__body {
+  position: relative;
+  height: clamp(360px, 60vw, 480px);
+  display: flex;
+}
+
+.demo-terminal-frame .ghs-viewer {
+  position: absolute;
+}
+
+.demo-terminal-frame .ghs-viewer__frame {
+  width: min(100%, 320px);
+  height: min(100%, 100%);
+}
+
+.demo-terminal-frame__idle {
+  margin: auto;
+  padding: var(--ghs-space-5);
+  text-align: center;
+  color: #9198a1;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.875rem;
+}
+
+/* ---------------------------------------------------------------- simulated post panel */
+
+.post-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ghs-overlay-backdrop);
+  padding: var(--ghs-space-4);
+}
+
+.post-panel__card {
+  position: relative;
+  width: min(100%, 420px);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--ghs-canvas);
+  border-radius: var(--ghs-radius-lg);
+  padding: var(--ghs-space-5);
+  box-shadow: var(--ghs-shadow-overlay);
+}
+
+.post-panel__card h3 {
+  margin: 0 0 var(--ghs-space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--ghs-space-2);
+}
+
+.post-panel__badge {
+  font-size: var(--ghs-font-size-sm);
+  font-weight: 600;
+  color: var(--ghs-accent-fg);
+  border: 1px solid var(--ghs-accent-fg);
+  border-radius: var(--ghs-radius-full);
+  padding: 0 var(--ghs-space-2);
+}
+
+.post-panel__note {
+  color: var(--ghs-fg-muted);
+  font-size: var(--ghs-font-size-sm);
+  margin: 0 0 var(--ghs-space-4);
+}
+
+.post-panel__close {
+  position: absolute;
+  top: var(--ghs-space-3);
+  right: var(--ghs-space-3);
+  border: 0;
+  background: transparent;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--ghs-fg-muted);
+}
+
+.post-panel__fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--ghs-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ghs-space-2);
+}
+
+.post-panel__fieldset legend {
+  font-size: var(--ghs-font-size-sm);
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: var(--ghs-space-2);
+}
+
+.post-panel__choice {
+  display: flex;
+  align-items: center;
+  gap: var(--ghs-space-2);
+  font-size: var(--ghs-font-size-body);
+  cursor: pointer;
+}
+
+.post-panel__choice img {
+  border-radius: var(--ghs-radius-sm);
+  object-fit: cover;
+}
+
+.post-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ghs-space-1);
+  font-size: var(--ghs-font-size-sm);
+  font-weight: 600;
+  margin-bottom: var(--ghs-space-4);
+}
+
+.post-panel__field select {
+  font-size: var(--ghs-font-size-body);
+  font-weight: 400;
+  padding: var(--ghs-space-2);
+  border-radius: var(--ghs-radius-sm);
+  border: 1px solid var(--ghs-border-default);
+  background: var(--ghs-canvas);
+  color: var(--ghs-fg-default);
+}
+
+.post-panel__actions {
+  display: flex;
+  gap: var(--ghs-space-2);
+  justify-content: flex-end;
+}
+
+.post-panel__success {
+  margin: var(--ghs-space-4) 0 0;
+  padding-top: var(--ghs-space-3);
+  border-top: 1px solid var(--ghs-border-muted);
+  font-size: var(--ghs-font-size-sm);
+  color: var(--ghs-success-fg);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ghs-space-2);
+}

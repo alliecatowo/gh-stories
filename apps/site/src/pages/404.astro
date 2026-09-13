@@ -1,0 +1,21 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { withBase } from '../lib/base';
+---
+
+<BaseLayout title="Not found" description="This page does not exist." path="/404/">
+  <div class="wrap not-found">
+    <svg class="not-found__ring" viewBox="0 0 72 72" role="img" aria-label="An empty Story ring">
+      <defs>
+        <linearGradient id="nf-ring" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e5486f" />
+          <stop offset="100%" stop-color="#f0883e" />
+        </linearGradient>
+      </defs>
+      <circle cx="36" cy="36" r="28" fill="none" stroke="url(#nf-ring)" stroke-width="5" stroke-dasharray="10 8" />
+    </svg>
+    <h1>This Story expired. Or never existed.</h1>
+    <p>Nothing lives at this address for more than 24 hours around here either way.</p>
+    <p><a class="btn btn--primary" href={withBase('/')}>Back to the start</a></p>
+  </div>
+</BaseLayout>

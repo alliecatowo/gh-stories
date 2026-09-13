@@ -1,0 +1,78 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { VISIBILITY_LABELS, VISIBILITY_DESCRIPTIONS, STORY_LIFETIME_MS } from '@gh-stories/contracts';
+
+const lifetimeHours = STORY_LIFETIME_MS / (60 * 60 * 1000);
+const audiences = Object.keys(VISIBILITY_LABELS) as (keyof typeof VISIBILITY_LABELS)[];
+---
+
+<BaseLayout
+  title="Privacy"
+  description="Who can see a Story, how long it lasts, how private media is protected, and what deleting one actually does and does not do."
+  path="/docs/privacy/"
+>
+  <div class="wrap">
+    <header class="page-header prose">
+      <h1>Privacy and retention</h1>
+      <p class="lede">Plain language, chosen before you post — never adjusted after the fact.</p>
+    </header>
+
+    <div class="prose">
+      <h2>Five audiences</h2>
+      <p>Every Story is published to exactly one of these. There is no default that quietly means "everyone."</p>
+    </div>
+
+    <dl class="audience-grid">
+      {
+        audiences.map((key) => (
+          <div class="audience-card">
+            <dt>{VISIBILITY_LABELS[key]}</dt>
+            <dd>{VISIBILITY_DESCRIPTIONS[key]}</dd>
+          </div>
+        ))
+      }
+    </dl>
+
+    <div class="prose">
+      <p>
+        On top of the chosen audience, an author can hide a Story from specific people, and turn
+        replies or reactions off per item.
+      </p>
+
+      <h2>Every item expires — per item, not per account</h2>
+      <p>
+        Each Story item disappears exactly {lifetimeHours} hours after <em>it</em> was published —
+        measured from that item's own publish time, not from the account's last post or first post
+        of the day. Post three items across an afternoon and the first one is gone while the third
+        is still up. There is no way to pin an item past {lifetimeHours} hours, and no paid tier
+        that changes this.
+      </p>
+
+      <h2>Private media sits behind an authorization gateway</h2>
+      <p>
+        Media is not served from a public object URL or a long-lived signed link. Every request for
+        a photo or video is checked, at request time, against the current audience, blocks, hides
+        and deletion state, and streamed through an authenticated gateway. That means a block, an
+        audience change or a deletion takes effect immediately — there is no already-issued link
+        floating around that keeps working after you've changed your mind.
+      </p>
+
+      <h2>What this cannot do</h2>
+      <div class="callout">
+        <p>
+          None of the above un-sends anything. If a pixel already reached another person's screen —
+          rendered in their browser, downloaded by their terminal, screenshotted — deleting the
+          Story here does not reach back onto their device and remove it. Expiry, audience controls
+          and deletion stop <em>future</em> access. They do not undo past access.
+        </p>
+      </div>
+
+      <h2>Moderation</h2>
+      <p>
+        Reports go to a moderation queue, independent of the author. Suspended accounts stop
+        appearing to others immediately; their existing items still expire on the same {lifetimeHours}
+        {' '}-hour clock rather than persisting indefinitely as evidence.
+      </p>
+    </div>
+  </div>
+</BaseLayout>

@@ -1,0 +1,48 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { withBase } from '../../../lib/base';
+
+const REPO = 'https://github.com/alliecatowo/gh-stories';
+---
+
+<BaseLayout
+  title="Self-hosting"
+  description="Pointer to the self-hosting runbook: running your own GitHub Stories service instead of the hosted one."
+  path="/docs/self-hosting/"
+>
+  <div class="wrap">
+    <header class="page-header prose">
+      <h1>Self-hosting</h1>
+      <p class="lede">Both clients talk to a service over the documented API. That service is not required to be ours.</p>
+    </header>
+
+    <div class="prose">
+      <p>
+        GitHub Stories is a Go service (API + media worker) behind PostgreSQL and object storage,
+        plus the two clients described on the rest of this site. Running your own instance means
+        standing up that service, registering your own GitHub OAuth app, and pointing the CLI and
+        browser extension at it instead of the hosted deployment.
+      </p>
+      <p>This page is a pointer, not a copy. The actual runbook lives in the repository and is the source of truth:</p>
+      <p>
+        <a class="btn btn--secondary" href={`${REPO}/blob/main/docs/runbook.md`}>
+          Open docs/runbook.md in the repository →
+        </a>
+      </p>
+      <p>
+        At a high level, expect it to cover: the OpenAPI contract in
+        <code>packages/contracts/openapi.yaml</code>, the versioned SQL migrations under
+        <code>infra/migrations</code>, the environment variables the service refuses to start
+        without in production, the container image, and how to point <code>gh stories</code> and
+        the browser extension at a non-default service URL.
+      </p>
+      <p>
+        Self-hosting inherits every privacy behavior described on the <a href={withBase('/docs/privacy/')}>privacy
+        page</a> — the {' '}<a href={withBase('/docs/privacy/')}>24-hour expiry</a> and the audience model are
+        properties of the software, not of who operates it. What a self-hosted operator can see or
+        retain beyond that is a deployment decision on that operator's part, not something this
+        project controls.
+      </p>
+    </div>
+  </div>
+</BaseLayout>

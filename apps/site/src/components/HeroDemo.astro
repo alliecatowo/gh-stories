@@ -1,0 +1,94 @@
+---
+import { withBase } from '../lib/base';
+---
+
+<!--
+  Hero juxtaposition: a GitHub pull-request surface with an active Story
+  ring, beside a real terminal rendering the same media. Both panels below
+  are a hand-built HTML/CSS mock, clearly labelled as such.
+
+  TODO(replace-with-real-capture): once `mise run capture` has produced real
+  artifacts, replace the mocked markup inside the element carrying
+  `data-capture-target="docs/media/browser-pr-story.png"` with
+  `<img src={withBase('/media/browser-pr-story.png')} alt="…" width="…" height="…">`
+  sourced from docs/media/browser-pr-story.png.
+
+  TODO(replace-with-real-capture): same for
+  `data-capture-target="docs/media/terminal-story.png"`, sourced from
+  docs/media/terminal-story.png (a captured terminal session showing the
+  Kitty graphics protocol / iTerm2 inline image render, not a mock).
+-->
+<a class="hero-demo" href={withBase('/demo/')}>
+  <span class="ghs-visually-hidden">
+    Open the interactive sample demo. Preview: a mock GitHub pull request page showing an avatar
+    with an active Story ring, beside a mock terminal window rendering the same photo inline.
+  </span>
+  <div class="hero-demo__label" aria-hidden="true">
+    <span>Sample presentation — not a live product screenshot</span>
+    <span class="hero-demo__cta">Open the interactive demo →</span>
+  </div>
+
+  <div class="hero-demo__panels" aria-hidden="true">
+    <div class="pr-mock" data-capture-target="docs/media/browser-pr-story.png">
+      <div class="pr-mock__topbar">
+        <span class="pr-mock__dot"></span>
+        <span class="pr-mock__dot"></span>
+        <span class="pr-mock__dot"></span>
+        <span>octo-org/upload-worker — Pull Request #482</span>
+      </div>
+      <div class="pr-mock__body">
+        <p class="pr-mock__title">Fix flaky retry in upload worker</p>
+        <p class="pr-mock__meta">maya-devs wants to merge 1 commit into main from fix/retry-jitter</p>
+        <p class="pr-mock__row-label">Reviewers</p>
+        <div class="pr-mock__rings">
+          <span class="mock-ring" data-state="unseen">
+            <img
+              class="mock-ring__avatar"
+              src={withBase('/samples/avatar-otterframes.svg')}
+              alt="otterframes has an unseen Story"
+              width="40"
+              height="40"
+            />
+          </span>
+          <span class="mock-ring" data-state="seen">
+            <img
+              class="mock-ring__avatar"
+              src={withBase('/samples/avatar-boxcat.svg')}
+              alt="boxcat's Story has been seen"
+              width="40"
+              height="40"
+            />
+          </span>
+          <span class="mock-ring" data-state="none">
+            <img
+              class="mock-ring__avatar"
+              src={withBase('/samples/avatar-ramenroute.svg')}
+              alt="ramenroute has no active Story"
+              width="40"
+              height="40"
+            />
+          </span>
+        </div>
+        <div class="pr-mock__diff">
+          <div class="ctx">@@ -12,7 +12,7 @@ func (w *Worker) upload(ctx context.Context) error &#123;</div>
+          <div class="add">+ backoff := jitter(attempt, baseDelay)</div>
+          <div class="add">+ time.Sleep(backoff)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="term-mock" data-capture-target="docs/media/terminal-story.png">
+      <div class="term-mock__topbar">
+        <span class="term-mock__dots"><span></span><span></span><span></span></span>
+        <span class="term-mock__title">zsh — gh stories</span>
+      </div>
+      <div class="term-mock__body">
+        <span class="term-mock__prompt">gh stories view otterframes</span>
+        <span class="term-mock__image">
+          <img src={withBase('/samples/concert-1.svg')} alt="" width="480" height="300" loading="lazy" />
+        </span>
+        <span class="term-mock__caption">rendered inline via the Kitty graphics protocol</span>
+      </div>
+    </div>
+  </div>
+</a>

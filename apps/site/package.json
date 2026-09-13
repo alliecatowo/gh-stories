@@ -1,0 +1,26 @@
+{
+  "name": "@gh-stories/site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "astro check --minimumSeverity error || tsc --noEmit"
+  },
+  "dependencies": {
+    "@gh-stories/contracts": "workspace:*",
+    "@gh-stories/ui": "workspace:*",
+    "astro": "7.3.2",
+    "@astrojs/react": "6.0.5",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "5.9.3"
+  }
+}

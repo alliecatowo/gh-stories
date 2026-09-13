@@ -484,3 +484,24 @@ func (s *Store) LoadDraft(ctx context.Context, uploadID uuid.UUID) (StoryDraft, 
 	}
 	return d, filename, nil
 }
+
+// VariantKeys returns the private object keys of a Story's media variants.
+// Used by operations and by tests that assert physical cleanup actually
+// removed the bytes, not merely the rows.
+func (s *Store) VariantKeys(ctx context.Context, storyID uuid.UUID) ([]string, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT object_key FROM media_variants WHERE story_item_id = $1`, storyID)
+	if err != nil {
+		return nil, wrap("variant keys", err)
+	}
+	defer rows.Close()
+	var keys []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		keys = append(keys, k)
+	}
+	return keys, rows.Err()
+}

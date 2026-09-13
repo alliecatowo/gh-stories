@@ -39,12 +39,12 @@ type SessionInfo struct {
 // PendingLogin is returned by POST /auth/cli/pending: the code and URL a
 // person uses to approve a device-flow-style login.
 type PendingLogin struct {
-	PendingLoginID   string    `json:"pending_login_id"`
-	PollingSecret    string    `json:"polling_secret"`
-	UserCode         string    `json:"user_code"`
-	VerificationURL  string    `json:"verification_url"`
-	ExpiresAt        time.Time `json:"expires_at"`
-	IntervalSeconds  int       `json:"interval_seconds"`
+	PendingLoginID  string    `json:"pending_login_id"`
+	PollingSecret   string    `json:"polling_secret"`
+	UserCode        string    `json:"user_code"`
+	VerificationURL string    `json:"verification_url"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	IntervalSeconds int       `json:"interval_seconds"`
 }
 
 // PendingLoginPoll is one POST /auth/cli/poll response.
@@ -253,16 +253,16 @@ type AudienceList struct {
 
 // Settings is the caller's account settings.
 type Settings struct {
-	DefaultVisibility      string         `json:"default_visibility"`
-	DefaultAudienceListID  string         `json:"default_audience_list_id,omitempty"`
-	DefaultAllowReplies    bool           `json:"default_allow_replies"`
-	DefaultAllowReactions  bool           `json:"default_allow_reactions"`
-	AudienceLists          []AudienceList `json:"audience_lists"`
-	HiddenFrom             []PublicUser   `json:"hidden_from"`
-	Muted                  []PublicUser   `json:"muted"`
-	Blocked                []PublicUser   `json:"blocked"`
-	Sessions               []SessionInfo  `json:"sessions"`
-	ReplyRetentionDays     int            `json:"reply_retention_days"`
+	DefaultVisibility     string         `json:"default_visibility"`
+	DefaultAudienceListID string         `json:"default_audience_list_id,omitempty"`
+	DefaultAllowReplies   bool           `json:"default_allow_replies"`
+	DefaultAllowReactions bool           `json:"default_allow_reactions"`
+	AudienceLists         []AudienceList `json:"audience_lists"`
+	HiddenFrom            []PublicUser   `json:"hidden_from"`
+	Muted                 []PublicUser   `json:"muted"`
+	Blocked               []PublicUser   `json:"blocked"`
+	Sessions              []SessionInfo  `json:"sessions"`
+	ReplyRetentionDays    int            `json:"reply_retention_days"`
 }
 
 // SettingsUpdate is a partial update to account settings.

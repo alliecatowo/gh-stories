@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" role="img" aria-label="Illustrated scene: a bowl of ramen with steam rising, chopsticks resting on the side.">
+  <rect width="800" height="1000" fill="#241a14"/>
+  <ellipse cx="400" cy="560" rx="260" ry="90" fill="#3a2a1f"/>
+  <ellipse cx="400" cy="540" rx="230" ry="75" fill="#c0392b"/>
+  <ellipse cx="400" cy="530" rx="210" ry="60" fill="#e0663f"/>
+  <g fill="#f4d35e">
+    <circle cx="330" cy="520" r="10"/>
+    <circle cx="470" cy="515" r="10"/>
+    <circle cx="400" cy="500" r="10"/>
+  </g>
+  <g stroke="#fbeee0" stroke-width="8" stroke-linecap="round" opacity="0.9">
+    <path d="M300 530 q30 -10 60 0"/>
+    <path d="M420 525 q30 -12 70 4"/>
+  </g>
+  <g stroke="#f0f6fc" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.55">
+    <path d="M340 460 q-10 -40 10 -80"/>
+    <path d="M400 450 q-10 -40 10 -80"/>
+    <path d="M460 460 q-10 -40 10 -80"/>
+  </g>
+  <g stroke="#d9a066" stroke-width="6" stroke-linecap="round">
+    <line x1="560" y1="470" x2="640" y2="380"/>
+    <line x1="575" y1="490" x2="655" y2="400"/>
+  </g>
+</svg>

@@ -1,0 +1,143 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { withBase } from '../../../lib/base';
+
+const REPO = 'https://github.com/alliecatowo/gh-stories';
+
+const terminalRows = [
+  {
+    target: 'kitty',
+    image: 'Inline, via the Kitty graphics protocol',
+    video: 'Poster frame inline; playback opens externally',
+    status: 'supported',
+  },
+  {
+    target: 'iTerm2 (macOS)',
+    image: 'Inline, via the iTerm2 inline images protocol',
+    video: 'Poster frame inline; playback opens externally',
+    status: 'supported',
+  },
+  {
+    target: 'Everything else — Terminal.app, Windows Terminal, tmux, VS Code’s integrated terminal, and any terminal not listed above',
+    image: 'Opens in your default image viewer instead of drawing inline',
+    video: 'Opens in your default player; no poster frame is drawn inline',
+    status: 'fallback',
+  },
+];
+
+const browserRows = [
+  { target: 'Chrome', install: 'Manual — Load unpacked from the release archive', status: 'manual' },
+  { target: 'Edge', install: 'Manual — Load unpacked from the release archive', status: 'manual' },
+  { target: 'Firefox', install: 'Manual — Load Temporary Add-on; unsigned, reload each session', status: 'manual' },
+  { target: 'Safari', install: 'No build exists', status: 'fallback' },
+];
+---
+
+<BaseLayout
+  title="Support matrix"
+  description="Exactly which terminals render Story images inline, which fall back to an external viewer, and which browsers the extension currently supports."
+  path="/docs/support/"
+>
+  <div class="wrap">
+    <header class="page-header prose">
+      <h1>Support matrix</h1>
+      <p class="lede">No rounding up. If a row says fallback, it falls back.</p>
+    </header>
+
+    <div class="prose">
+      <h2>Terminal image rendering</h2>
+      <p>
+        <code>gh stories</code> only ever draws a real image inline through a terminal graphics
+        protocol it has actually implemented. Two, currently: the Kitty graphics protocol and
+        iTerm2's inline images protocol. Everywhere else, it is honest about the gap and opens the
+        image in your system's default viewer instead of approximating it with block characters or
+        skipping it silently.
+      </p>
+    </div>
+
+    <div class="table-scroll">
+      <table class="matrix-table">
+        <caption>Image rendering by terminal</caption>
+        <thead>
+          <tr>
+            <th scope="col">Terminal</th>
+            <th scope="col">Image</th>
+            <th scope="col">Video</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            terminalRows.map((row) => (
+              <tr>
+                <th scope="row">{row.target}</th>
+                <td>{row.image}</td>
+                <td>{row.video}</td>
+                <td>
+                  <span class="status-pill" data-status={row.status}>
+                    {row.status === 'supported' ? 'Inline' : 'Fallback'}
+                  </span>
+                </td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <p>
+        Video is never drawn as inline motion in any terminal, anywhere — only a real still poster
+        frame (inline where supported, opened externally where not), plus a command to open the
+        actual video in an external player. That claim does not change based on which terminal you
+        use.
+      </p>
+      <p>
+        This table is proved by captured runs of the real CLI against real terminals (see
+        <code>mise run capture</code> in the repository), not by descriptions on this page. The
+        <a href={withBase('/demo/')}>browser sample demo</a> simulates the terminal's visual
+        frame for comparison only and is not evidence of terminal rendering.
+      </p>
+
+      <h2>Browser extension</h2>
+      <p>Manual install everywhere, for now — see the <a href={withBase('/docs/install/')}>install page</a> for exact steps.</p>
+    </div>
+
+    <div class="table-scroll">
+      <table class="matrix-table">
+        <caption>Browser support</caption>
+        <thead>
+          <tr>
+            <th scope="col">Browser</th>
+            <th scope="col">Install</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            browserRows.map((row) => (
+              <tr>
+                <th scope="row">{row.target}</th>
+                <td>{row.install}</td>
+                <td>
+                  <span class="status-pill" data-status={row.status}>
+                    {row.status === 'manual' ? 'Manual install' : 'Not supported'}
+                  </span>
+                </td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <p>
+        None of the above is published in an extension store yet. There is no compatibility claim
+        beyond what is in these two tables — see the current
+        <a href={`${REPO}/blob/main/docs/checklist.md`}>implementation checklist</a> for what is
+        still in progress.
+      </p>
+    </div>
+  </div>
+</BaseLayout>

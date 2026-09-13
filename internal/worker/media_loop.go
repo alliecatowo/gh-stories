@@ -29,21 +29,18 @@ func (w *Worker) runMediaLoop(ctx context.Context) {
 		default:
 		}
 
-		job, err := w.store.ClaimMediaJob(ctx, w.cfg.WorkerID, w.cfg.MediaLeaseDuration)
-		if err != nil {
-			if !errors.Is(err, store.ErrNotFound) {
-				w.log.Error("claim media job failed", "error", err)
-			}
-			sleep(ctx, w.cfg.MediaPollInterval)
-			continue
-		}
-
-		// Handle with a context independent of the loop's shutdown signal:
+		// Handled with a context independent of the loop's shutdown signal:
 		// once a job is claimed, finishing it cleanly (success or a proper
 		// failure record) is strictly better than aborting mid-transcode,
 		// and the job's own MaxProcessingTime already bounds how long that
 		// can take.
-		w.handleMediaJob(context.Background(), job)
+		found, err := w.ProcessOneMediaJob(context.Background())
+		if err != nil {
+			w.log.Error("claim media job failed", "error", err)
+		}
+		if !found {
+			sleep(ctx, w.cfg.MediaPollInterval)
+		}
 	}
 }
 

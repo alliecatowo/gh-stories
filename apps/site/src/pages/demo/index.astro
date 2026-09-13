@@ -1,0 +1,39 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DemoIsland from '../../components/DemoIsland.tsx';
+import { withBase } from '../../lib/base';
+---
+
+<BaseLayout
+  title="Demo"
+  description="An interactive, in-memory sample of GitHub Stories: fictional accounts, sample photos, browser and terminal presentations. No login, nothing sent anywhere."
+  path="/demo/"
+>
+  <div class="wrap">
+    <header class="page-header prose">
+      <h1>Sample demo</h1>
+      <p class="lede">
+        Sample content. Fictional accounts. Nothing here is a real person's Story.
+      </p>
+      <p>
+        This runs entirely in your browser, in memory. There is no login, and nothing you do here
+        is sent to any server — closing or reloading the tab resets it completely. Every account,
+        caption and photo below is fabricated for this page; see
+        <a href={withBase('/samples/README.md')}>the sample asset provenance note</a> if you want the
+        details.
+      </p>
+      <div class="callout">
+        <p>
+          The terminal presentation below reuses the same viewer component inside a terminal-shaped
+          frame, for comparison only. It is <strong>not</strong> evidence that terminal rendering
+          works — that is proved separately, by captured runs of the real <code>gh stories</code>{' '}
+          CLI against real terminals. See the <a href={withBase('/docs/support/')}>support matrix</a>.
+        </p>
+      </div>
+    </header>
+  </div>
+
+  <div class="wrap">
+    <DemoIsland client:visible />
+  </div>
+</BaseLayout>

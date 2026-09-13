@@ -1,0 +1,149 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { withBase } from '../../../lib/base';
+
+const REPO = 'https://github.com/alliecatowo/gh-stories';
+---
+
+<BaseLayout
+  title="Install"
+  description="Install the gh stories CLI extension and the GitHub Stories browser extension. Exact commands and manual-install steps, matching what's actually published."
+  path="/docs/install/"
+>
+  <div class="wrap">
+    <header class="page-header prose">
+      <h1>Install</h1>
+      <p class="lede">Two independent clients. Same account, same Stories, same 24-hour clock.</p>
+    </header>
+
+    <div class="prose">
+      <h2 id="cli">CLI</h2>
+      <p>
+        <code>gh stories</code> is a <a href="https://cli.github.com/">GitHub CLI</a> extension.
+        Install it, then let it set itself up.
+      </p>
+      <div class="code-block">
+        <button class="code-block__copy" type="button" data-copy-target="install-cli-cmd">Copy</button>
+        <pre id="install-cli-cmd">gh extension install alliecatowo/gh-stories
+gh stories setup
+gh stories login
+gh stories</pre>
+      </div>
+
+      <div class="step">
+        <span class="step__index" aria-hidden="true">1</span>
+        <div class="step__body">
+          <h3><code>gh extension install alliecatowo/gh-stories</code></h3>
+          <p>Downloads the extension binary for your platform and registers the <code>gh stories</code> command namespace.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step__index" aria-hidden="true">2</span>
+        <div class="step__body">
+          <h3><code>gh stories setup</code></h3>
+          <p>
+            Explains and offers <code>gh alias set story stories</code>, so <code>gh story post cat.jpg</code>{' '}
+            also works. It never overwrites an existing alias or a real <code>gh</code> command.
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step__index" aria-hidden="true">3</span>
+        <div class="step__body">
+          <h3><code>gh stories login</code></h3>
+          <p>Opens a device-code style GitHub OAuth flow, scoped to Stories.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step__index" aria-hidden="true">4</span>
+        <div class="step__body">
+          <h3><code>gh stories</code></h3>
+          <p>Opens the full-screen terminal UI: your feed, viewer, composer, replies, reactions and viewer lists.</p>
+        </div>
+      </div>
+
+      <p>
+        Which terminals actually render the picture inline (rather than falling back to an
+        external viewer) is listed exactly, with no rounding up, on the
+        <a href={withBase('/docs/support/')}>support matrix</a>.
+      </p>
+
+      <h2 id="extension">Browser extension</h2>
+      <div class="callout">
+        <p>
+          <strong>Manual install only.</strong> The extension is not published in the Chrome Web
+          Store and there is no signed Firefox add-on. Every release ships a plain archive on the
+          <a href={`${REPO}/releases/latest`}>latest release</a> page — you load it yourself.
+        </p>
+      </div>
+
+      <h3>Chrome or Edge</h3>
+      <div class="step">
+        <span class="step__index" aria-hidden="true">1</span>
+        <div class="step__body">
+          <p>
+            Download and unzip the <code>chrome</code> (or <code>edge</code>) archive from the
+            <a href={`${REPO}/releases/latest`}>latest release</a>.
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step__index" aria-hidden="true">2</span>
+        <div class="step__body">
+          <p>Visit <code>chrome://extensions</code> (or <code>edge://extensions</code>) and turn on Developer mode.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step__index" aria-hidden="true">3</span>
+        <div class="step__body">
+          <p>Choose <strong>Load unpacked</strong> and select the unzipped folder.</p>
+        </div>
+      </div>
+
+      <h3>Firefox</h3>
+      <div class="step">
+        <span class="step__index" aria-hidden="true">1</span>
+        <div class="step__body">
+          <p>Download and unzip the <code>firefox</code> archive from the same release.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step__index" aria-hidden="true">2</span>
+        <div class="step__body">
+          <p>Visit <code>about:debugging#/runtime/this-firefox</code> and choose <strong>Load Temporary Add-on…</strong></p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step__index" aria-hidden="true">3</span>
+        <div class="step__body">
+          <p>
+            Select the archive's <code>manifest.json</code>. Firefox removes temporary add-ons on
+            restart — you'll reload it each session until a signed build exists.
+          </p>
+        </div>
+      </div>
+
+      <p>Sign in from the extension's toolbar popup with the same GitHub OAuth flow the CLI uses. Read state, follows, privacy and deletions stay in sync between both clients.</p>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('[data-copy-target]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const targetId = button.getAttribute('data-copy-target');
+        const target = targetId ? document.getElementById(targetId) : null;
+        const text = target ? target.textContent || '' : '';
+        try {
+          await navigator.clipboard.writeText(text);
+          const original = button.textContent;
+          button.textContent = 'Copied';
+          window.setTimeout(() => {
+            button.textContent = original;
+          }, 1500);
+        } catch (err) {
+          /* Clipboard API unavailable — the command is still plain, selectable text. */
+        }
+      });
+    });
+  </script>
+</BaseLayout>

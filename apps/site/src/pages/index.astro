@@ -1,0 +1,182 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import HeroDemo from '../components/HeroDemo.astro';
+import { withBase } from '../lib/base';
+import { VISIBILITY_LABELS, STORY_LIFETIME_MS } from '@gh-stories/contracts';
+
+const REPO = 'https://github.com/alliecatowo/gh-stories';
+const lifetimeHours = STORY_LIFETIME_MS / (60 * 60 * 1000);
+const audiences = Object.entries(VISIBILITY_LABELS);
+---
+
+<BaseLayout
+  title="GitHub Stories"
+  description="Stories for GitHub. Yes, those Stories. Photos, videos, selfies, concerts, cats, food, memes, shitposts — on avatars you already know, and in your terminal. Expires after 24 hours."
+  path="/"
+>
+  <section class="hero">
+    <div class="wrap">
+      <span class="hero__kicker">Independent project · not affiliated with GitHub</span>
+      <h1>GitHub Stories</h1>
+      <p class="hero__tagline">Stories for GitHub. Yes, those Stories.</p>
+      <p class="hero__lede">
+        Photos, videos, selfies, concerts, cats, food, memes, shitposts. They expire after {lifetimeHours}
+        {' '}hours. They appear on avatars you already know — and in your terminal.
+      </p>
+
+      <div class="btn-row hero__ctas">
+        <div class="btn-stack">
+          <a class="btn btn--primary" href={withBase('/demo/')}>Try the demo</a>
+          <span class="btn-note">Runs entirely in your browser. Fictional sample content, no login.</span>
+        </div>
+        <div class="btn-stack">
+          <a class="btn btn--secondary" href={`${REPO}/releases/latest`}>Install extension</a>
+          <span class="btn-note">Manual install from the latest release archive. Not in the Chrome Web Store; no signed Firefox add-on.</span>
+        </div>
+        <div class="btn-stack">
+          <a class="btn btn--secondary" href={withBase('/docs/install/#cli')}>Install CLI</a>
+          <span class="btn-note">Via the real <code>gh extension install</code> command.</span>
+        </div>
+      </div>
+
+      <HeroDemo />
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="what-it-is">
+    <div class="wrap">
+      <h2 id="what-it-is">What it is</h2>
+      <p class="section-intro">Three pieces. One Story.</p>
+      <div class="columns">
+        <div class="col-card">
+          <svg class="col-card__icon" viewBox="0 0 40 40" aria-hidden="true">
+            <defs>
+              <linearGradient id="ic1" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#e5486f" />
+                <stop offset="100%" stop-color="#f0883e" />
+              </linearGradient>
+            </defs>
+            <circle cx="20" cy="20" r="16" fill="none" stroke="url(#ic1)" stroke-width="4" />
+            <circle cx="20" cy="20" r="9" fill="currentColor" opacity="0.15" />
+          </svg>
+          <h3>Rings on avatars you already know</h3>
+          <p>
+            The same magenta-to-amber ring you already recognize, now around the avatars on pull
+            requests, issues and profiles. Click one; the code review is still there when you close it.
+          </p>
+        </div>
+        <div class="col-card">
+          <svg class="col-card__icon" viewBox="0 0 40 40" aria-hidden="true">
+            <rect x="6" y="10" width="28" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="2.5" />
+            <circle cx="20" cy="20" r="6" fill="none" stroke="currentColor" stroke-width="2.5" />
+            <circle cx="27" cy="15" r="1.6" fill="currentColor" />
+          </svg>
+          <h3>A composer</h3>
+          <p>
+            Drag in a photo or video, crop it, caption it, pick who sees it, post it. It disappears
+            on its own in {lifetimeHours} hours — nothing to clean up later.
+          </p>
+        </div>
+        <div class="col-card">
+          <svg class="col-card__icon" viewBox="0 0 40 40" aria-hidden="true">
+            <rect x="4" y="8" width="32" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="2.5" />
+            <path d="M10 16 l5 4 -5 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+            <line x1="19" y1="24" x2="27" y2="24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+          </svg>
+          <h3>The same Stories in your terminal</h3>
+          <p>
+            <code>gh stories</code> shows the identical Story as an actual rendered image, next to
+            the shell you were already in.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--subtle" aria-labelledby="terminal-heading">
+    <div class="wrap">
+      <h2 id="terminal-heading">A picture. In your terminal. Really.</h2>
+      <p class="section-intro">
+        <code>gh stories</code> renders the actual image inline — via the Kitty graphics protocol
+        in terminals that speak it, and via iTerm2's inline images protocol on iTerm2. Everywhere
+        else, it falls back honestly: it opens the image in your default viewer instead of drawing
+        it inline, and says so.
+      </p>
+      <p class="section-intro">
+        Video is never claimed inline: the CLI shows a real poster frame from the video, plus a
+        command to open it in an external player. No terminal renders inline video here.
+      </p>
+      <p>
+        <a href={withBase('/docs/support/')}>See the exact platform and renderer support matrix →</a>
+      </p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="privacy-heading">
+    <div class="wrap">
+      <h2 id="privacy-heading">Privacy, plainly</h2>
+      <p class="section-intro">
+        Five audiences, chosen before you post — never after. Plain language, not access-control
+        jargon.
+      </p>
+      <dl class="audience-grid">
+        {
+          audiences.map(([, label]) => (
+            <div class="audience-card">
+              <dt>{label}</dt>
+            </div>
+          ))
+        }
+      </dl>
+      <div class="callout">
+        <p>Every item expires exactly {lifetimeHours} hours after <em>it</em> was published — not after the account's last post, per item.</p>
+        <p>Private media is streamed through an authorization gateway, not a signed URL that keeps working after you've changed your mind.</p>
+        <p>
+          None of that un-sends a photo someone already saw. If a pixel already reached another
+          person's screen, deleting it here does not reach back and remove it from their device.
+        </p>
+      </div>
+      <p><a href={withBase('/docs/privacy/')}>Read the full privacy and retention page →</a></p>
+    </div>
+  </section>
+
+  <section class="section section--subtle" aria-labelledby="install-heading">
+    <div class="wrap">
+      <h2 id="install-heading">Install</h2>
+      <p class="section-intro">Two independent clients, one account.</p>
+      <div class="code-block">
+        <button class="code-block__copy" type="button" data-copy-target="cli-cmd">Copy</button>
+        <pre id="cli-cmd">gh extension install alliecatowo/gh-stories
+gh stories setup
+gh stories login
+gh stories</pre>
+      </div>
+      <p class="section-intro" style="margin-top: var(--ghs-space-4)">
+        The browser extension is a manual install for now: download the archive from the
+        <a href={`${REPO}/releases/latest`}>latest release</a> and load it as an unpacked/temporary
+        extension. Full steps for Chrome, Edge and Firefox are on the install page.
+      </p>
+      <p><a href={withBase('/docs/install/')}>Full install instructions →</a></p>
+    </div>
+  </section>
+
+  <script>
+    document.querySelectorAll('[data-copy-target]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const targetId = button.getAttribute('data-copy-target');
+        const target = targetId ? document.getElementById(targetId) : null;
+        const text = target ? target.textContent || '' : '';
+        try {
+          await navigator.clipboard.writeText(text);
+          const original = button.textContent;
+          button.textContent = 'Copied';
+          window.setTimeout(() => {
+            button.textContent = original;
+          }, 1500);
+        } catch (err) {
+          /* Clipboard API unavailable — the command is still plain, selectable text. */
+        }
+      });
+    });
+  </script>
+</BaseLayout>

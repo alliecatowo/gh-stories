@@ -1,0 +1,82 @@
+---
+import '@gh-stories/ui/styles.css';
+import '../styles/global.css';
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import { absoluteUrl, withBase } from '../lib/base';
+
+interface Props {
+  title: string;
+  description: string;
+  /** Root-relative path of this page, e.g. "/docs/privacy/". */
+  path: string;
+  /** Root-relative path to a social preview image. Defaults to the site-wide one. */
+  ogImage?: string;
+}
+
+const { title, description, path, ogImage = '/social-preview.png' } = Astro.props;
+const canonical = absoluteUrl(path);
+const ogImageUrl = absoluteUrl(ogImage);
+const pageTitle = title === 'GitHub Stories' ? title : `${title} — GitHub Stories`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <link rel="icon" href={withBase('/favicon.svg')} type="image/svg+xml" />
+    <link rel="icon" href={withBase('/favicon.png')} type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href={withBase('/apple-touch-icon.png')} sizes="180x180" />
+    <link rel="mask-icon" href={withBase('/favicon.svg')} color="#e5486f" />
+
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:site_name" content="GitHub Stories" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
+
+    <!--
+      Applies a persisted manual color-mode choice before first paint, so
+      there is no flash of the wrong theme. Reads the same
+      `data-color-mode` attribute that @gh-stories/ui's theme.css already
+      keys its dark/light overrides on (see packages/ui/src/theme.css) —
+      this page does not invent a second theming mechanism.
+    -->
+    <script is:inline>
+      (function () {
+        try {
+          var stored = localStorage.getItem('ghs-color-mode');
+          if (stored === 'dark' || stored === 'light') {
+            document.documentElement.setAttribute('data-color-mode', stored);
+          }
+        } catch (e) {
+          /* localStorage unavailable (private mode, etc.) — fall back to prefers-color-scheme */
+        }
+      })();
+    </script>
+  </head>
+  <body class="ghs-root site">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <SiteHeader currentPath={path} />
+    <main id="main-content">
+      <slot />
+    </main>
+    <SiteFooter />
+  </body>
+</html>

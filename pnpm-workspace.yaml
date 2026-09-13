@@ -1,0 +1,7 @@
+packages:
+  - "packages/*"
+  - "apps/web-extension"
+  - "apps/site"
+  - "tests/e2e"
+allowBuilds:
+  esbuild: true
