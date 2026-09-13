@@ -81,6 +81,15 @@ jobs:
 
       - run: mise run build
 
+      # Browser scenarios are a separate step from unit tests: they need a
+      # built site and a real browser, and their failures should be
+      # attributable on their own.
+      - name: Install Chromium for the visual suite
+        run: mise exec -- pnpm --filter @gh-stories/e2e exec playwright install --with-deps chromium
+
+      - name: Visual scenarios (four viewports, real browser)
+        run: mise exec -- pnpm --filter @gh-stories/e2e exec playwright test
+
       - name: Upload failure traces
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

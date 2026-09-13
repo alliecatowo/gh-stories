@@ -22,6 +22,15 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
+  // Self-contained: the suite serves the built site itself, at the project
+  // subpath, so it can run anywhere without a separate setup step.
+  webServer: {
+    command: 'node serve-site.mjs',
+    url: 'http://localhost:4321/gh-stories/',
+    reuseExistingServer: true,
+    timeout: 30_000,
+  },
+
   projects: [
     { name: 'site', use: { ...devices['Desktop Chrome'] } },
     // Chromium-based so a WebKit download is not required to check narrow

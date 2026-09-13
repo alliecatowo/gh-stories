@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "playwright test",
+    "e2e": "playwright test",
+    "serve": "node serve-site.mjs",
     "install-browsers": "playwright install chromium firefox"
   },
   "devDependencies": {
