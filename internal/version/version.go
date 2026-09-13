@@ -10,9 +10,18 @@ var (
 	Commit = "unknown"
 	// BuildDate is an RFC3339 timestamp.
 	BuildDate = "unknown"
-	// DefaultServiceURL is the live service release artifacts target by
-	// default. Self-hosters override it at runtime, never by rebuilding.
-	DefaultServiceURL = "https://ghstories.fly.dev"
+	// DefaultServiceURL is the service release artifacts target by default.
+	//
+	// It is deliberately EMPTY in a build that was not given one at link time.
+	// Shipping a hard-coded URL for a service that is not actually running
+	// would send every new user's login attempt at a host that does not exist,
+	// which is worse than saying plainly that none is configured. A release
+	// that has a live service sets this with
+	// -X .../internal/version.DefaultServiceURL=https://…
+	//
+	// Self-hosters override it at runtime with GHS_SERVICE_URL or --service,
+	// never by rebuilding.
+	DefaultServiceURL = ""
 )
 
 // Short returns a compact "v0.1.0 (abc1234)" style string.

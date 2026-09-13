@@ -52,9 +52,35 @@ func serviceURL(flagValue string) string {
 	return strings.TrimSuffix(version.DefaultServiceURL, "/")
 }
 
+// errNoService explains the situation instead of failing against a host that
+// does not exist.
+var errNoService = errors.New(`no GitHub Stories service is configured.
+
+This build does not ship with a hosted service. Point it at one:
+
+    gh stories --service https://your-service.example login
+
+or set it once:
+
+    export GHS_SERVICE_URL=https://your-service.example
+
+Running your own takes a container, PostgreSQL and an S3-compatible bucket:
+https://github.com/alliecatowo/gh-stories/blob/main/docs/runbook.md`)
+
+// requireService fails early and clearly when there is nothing to talk to.
+func requireService(url string) error {
+	if strings.TrimSpace(url) == "" {
+		return errNoService
+	}
+	return nil
+}
+
 // openSession loads stored credentials and builds an API client.
 func openSession(service string, asJSON bool, renderer string) (*session, error) {
 	url := serviceURL(service)
+	if err := requireService(url); err != nil {
+		return nil, err
+	}
 	store, err := credstore.Open()
 	if err != nil {
 		return nil, fmt.Errorf("could not open a credential store: %w", err)
@@ -74,9 +100,12 @@ func openSession(service string, asJSON bool, renderer string) (*session, error)
 }
 
 // anonymousSession is for commands that run before sign-in.
-func anonymousSession(service string) *session {
+func anonymousSession(service string) (*session, error) {
 	url := serviceURL(service)
-	return &session{Client: cliapi.New(url, ""), ServiceURL: url}
+	if err := requireService(url); err != nil {
+		return nil, err
+	}
+	return &session{Client: cliapi.New(url, ""), ServiceURL: url}, nil
 }
 
 // interactive reports whether we may draw a full-screen application, prompt,

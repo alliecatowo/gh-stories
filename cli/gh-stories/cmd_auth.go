@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -32,7 +33,10 @@ func cmdLogin(ctx context.Context, args []string) error {
 		return usagef("gh stories login [--no-browser] [--service URL]")
 	}
 
-	sess := anonymousSession(*service)
+	sess, err := anonymousSession(*service)
+	if err != nil {
+		return err
+	}
 	label := clientLabel()
 
 	pending, err := sess.Client.CreatePendingLogin(ctx, "cli", label)
@@ -226,24 +230,35 @@ func cmdDoctor(ctx context.Context, args []string) error {
 	out("gh stories %s", version.Short())
 	out("")
 	out("Service")
-	out("  url                %s", url)
-
-	probeCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-	defer cancel()
-	if err := pingService(probeCtx, url); err != nil {
-		out("  reachable          no — %s", err)
+	if url == "" {
+		out("  url                (none configured)")
+		out("  next step          set GHS_SERVICE_URL, or pass --service URL")
 	} else {
-		out("  reachable          yes")
+		out("  url                %s", url)
+	}
+
+	if url != "" {
+		probeCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		defer cancel()
+		if err := pingService(probeCtx, url); err != nil {
+			out("  reachable          no — %s", err)
+		} else {
+			out("  reachable          yes")
+		}
 	}
 
 	out("")
 	out("Account")
 	sess, err := openSession(*service, false, "auto")
 	switch {
-	case err == errNotSignedIn:
+	case errors.Is(err, errNoService):
+		// The multi-line explanation belongs to the failing command, not to
+		// this one-line-per-fact report.
+		out("  signed in          n/a — no service configured")
+	case errors.Is(err, errNotSignedIn):
 		out("  signed in          no — run: gh stories login")
 	case err != nil:
-		out("  signed in          unknown — %s", err)
+		out("  signed in          unknown — %s", firstLine(err.Error()))
 	default:
 		out("  credential store   %s", sess.Store.Backend())
 		if sess.Store.Backend() != "keyring" {
@@ -351,4 +366,12 @@ func pingService(ctx context.Context, baseURL string) error {
 		return fmt.Errorf("the service answered %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// firstLine keeps a diagnostic report to one line per fact.
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }

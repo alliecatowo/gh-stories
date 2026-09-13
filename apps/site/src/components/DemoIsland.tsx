@@ -163,7 +163,7 @@ export default function DemoIsland() {
           <div className="demo-terminal-frame__body">
             {viewer ?? (
               <p className="demo-terminal-frame__idle">
-                <span className="term-mock__prompt">gh stories view &lt;login&gt;</span>
+                <span className="term-mock__prompt">gh stories @&lt;login&gt;</span>
                 <br />
                 Click a ring above to load a Story here.
               </p>

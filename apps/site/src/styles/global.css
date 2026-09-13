@@ -651,6 +651,17 @@ pre {
 
 .code-block pre {
   margin: 0;
+  /* The longest line (`gh extension install alliecatowo/gh-stories`) is wider
+     than a 360px screen, so let the block scroll horizontally instead of
+     clipping the command, and keep the text clear of the copy button. */
+  overflow-x: auto;
+  padding-right: 4.5rem;
+}
+
+@media (max-width: 480px) {
+  .code-block {
+    font-size: 0.8125rem;
+  }
 }
 
 .code-block__copy {
