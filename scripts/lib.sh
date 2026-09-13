@@ -97,6 +97,17 @@ ghs_port_pids() {
   lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null || true
 }
 
+# ghs_tcp_open HOST PORT — is something actually accepting connections there?
+#
+# Deliberately a real connection attempt rather than a local process lookup:
+# in CI the database is a service container whose listener does not show up in
+# this container's process table, and assuming "no local process" means "not
+# running" makes the script try to bind a port that is already taken.
+ghs_tcp_open() {
+  (exec 3<>"/dev/tcp/${1}/${2}") 2>/dev/null && exec 3<&- 3>&- && return 0
+  return 1
+}
+
 ghs_port_in_use() {
   [ -n "$(ghs_port_pids "$1")" ]
 }

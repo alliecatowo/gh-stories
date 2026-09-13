@@ -7,7 +7,11 @@
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-if ! ghs_port_in_use 55432 || ! ghs_port_in_use 55900; then
+# Only start our own stack if nothing is already serving these ports. CI
+# supplies PostgreSQL as a service container and MinIO as a step.
+if ghs_tcp_open 127.0.0.1 55432 && ghs_tcp_open 127.0.0.1 55900; then
+  ghs_info "using the PostgreSQL and object storage already listening on 55432/55900"
+else
   ghs_info "starting the local stack for integration tests"
   bash "$GHS_ROOT/scripts/infra.sh" up
 fi

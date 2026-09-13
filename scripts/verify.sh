@@ -20,7 +20,7 @@ blocked() { record "$1" BLOCKED "$2"; ghs_warn "$1 — BLOCKED: $2"; }
 skipped() { record "$1" SKIPPED "$2"; ghs_warn "$1 — SKIPPED: $2"; }
 
 # ---------------------------------------------------------------- local gates
-if ghs_port_in_use 55432 && ghs_port_in_use 55900; then
+if ghs_tcp_open 127.0.0.1 55432 && ghs_tcp_open 127.0.0.1 55900; then
   gate "Static checks" "format, vet, types, contract drift, isolation" \
     bash "$GHS_ROOT/scripts/check.sh"
   gate "Behavioural tests" "real PostgreSQL, real MinIO, real ffmpeg" \
