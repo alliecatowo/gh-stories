@@ -7,5 +7,6 @@ export default defineConfig({
     // than a hand-rolled stub that would let a broken adapter pass.
     environment: 'jsdom',
     include: ['tests/**/*.test.ts'],
+    globalSetup: ['./tests/global-setup.ts'],
   },
 });
