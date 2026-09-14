@@ -104,11 +104,54 @@ One real deployment finding: the presigned upload URL is built from
 by the service. Pointing it at a service-only hostname makes uploads fail at the
 PUT. This is now called out in the runbook.
 
+## Browser extension, loaded into a real Chromium
+
+A persistent Chromium context with the built MV3 extension loaded, driving
+`https://github.com/*` URLs whose content comes from a fictional, hand-written
+fixture. The URL is real, so the content script matches exactly as it would in
+the wild; no real page, account or private content is involved.
+
+| Scenario | Capture | Result |
+|---|---|---|
+| Story rings on GitHub avatars | `browser/extension-pr-rings.png` | ✅ ring around the avatar, avatar visible through the centre, activation badge; bots/apps undecorated |
+| Viewer opened from a ring | `browser/extension-viewer-open.png` | ✅ Story plays over the dimmed PR, with real media |
+| Closing returns to the page | `browser/extension-after-close.png` | ✅ GitHub intact, links unchanged |
+| Posting from the browser | `browser/extension-composer{,-published}.png` | ✅ preview → plain-language audience → uploading → processing → "Story posted.", confirmed on the service |
+| Dashboard Stories row | `browser/extension-dashboard-row.png` | ✅ |
+| Toolbar popup with no GitHub tab open | `browser/extension-popup.png` | ✅ |
+| API outage | — | ✅ GitHub stays completely usable |
+
+Six defects came out of actually running it, none of which unit tests could
+have found:
+
+1. **The background never started.** It used `browser.alarms` without the
+   `alarms` permission, so the service worker threw during init and never
+   registered its message listener. The popup hung on "Loading…" forever.
+2. **People disappeared from the page.** The ring's inner disc is opaque by
+   design; as an overlay it painted a solid circle over GitHub's real avatar.
+3. **Clicks were swallowed.** The overlay host covered the avatar with default
+   pointer events, intercepting every click and modified-click meant for
+   GitHub's profile link.
+4. **The ring was a filled circle, not a ring.** Fixed by confining the
+   gradient to the border box and masking the padding box away.
+5. **Media never loaded.** `runtime.sendMessage` serialises with JSON, not
+   structured clone, so an ArrayBuffer of media bytes arrived as `{}` and every
+   Blob was silently garbage. Uploads stalled at 0% for the same reason over a
+   port. Both now travel as chunked base64.
+6. **The settings page could not talk to its own background.**
+   `options_ui.open_in_tab` gives it a `sender.tab`, and the trust rule then
+   demanded a github.com origin and rejected it.
+
+Numbers 2, 3 and 4 were found by opening the screenshot and looking at it, not
+by a failing assertion. Two of my own tests were also wrong rather than the
+product: the popup check matched a word the signed-OUT screen contains, and the
+composer check matched "published" inside the instructional copy. Both now
+assert something that can only be true if the feature works.
+
 ## Not done
 
-- No browser-extension visual session: loading an MV3 extension needs a
-  persistent Chromium context, and the scenario suite for it is written but was
-  not run against a real GitHub page in this pass. The extension's adapters and
-  message validation are unit-tested against fictional GitHub-like markup.
-- No Firefox extension harness run.
+- **Firefox and Edge were not loaded into their browsers.** Both are built and
+  their packaged manifests are validated (permissions, host access, icons, CSP,
+  the gecko add-on id, the MV2 background/browser_action shape), but neither
+  was run. They are not claimed as exercised in a browser.
 - No live-service capture: nothing is deployed.

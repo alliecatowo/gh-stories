@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0]
+
+### Fixed
+- The browser extension now actually works in a browser. Loading it into a real
+  Chromium surfaced six defects that no unit test could reach: a missing
+  `alarms` permission that stopped the background from ever starting; an opaque
+  ring overlay that hid GitHub's avatars entirely; an overlay host that
+  swallowed clicks meant for profile links; a ring drawn as a filled circle
+  rather than a ring; media and uploads transferred as ArrayBuffers over
+  messaging channels that serialise with JSON, so nothing ever loaded and
+  uploads stalled at 0%; and a trust rule that rejected the extension's own
+  settings page because it opens in a tab.
+
+### Added
+- Browser-extension scenarios running against a real Chromium with the MV3
+  extension loaded, covering rings, the viewer, posting, the dashboard row, the
+  toolbar popup, colour-mode following and API-outage resilience.
+- Packaged-manifest validation for all three browser targets.
+
 ## [0.2.0]
 
 ### Added
