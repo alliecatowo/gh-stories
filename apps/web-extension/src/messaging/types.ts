@@ -309,9 +309,15 @@ export interface UploadStartMessage {
   audienceListId?: string;
   allowReplies: boolean;
   allowReactions: boolean;
-  /** Raw file bytes. Transferred once; never persisted by the background
-   * beyond the lifetime of this upload. */
-  bytes: ArrayBuffer;
+  /**
+   * Base64-encoded file bytes, transferred once and never persisted by the
+   * background beyond the lifetime of this upload.
+   *
+   * NOT an ArrayBuffer: extension ports serialise with JSON just like
+   * sendMessage, so an ArrayBuffer arrives as `{}` and the upload silently
+   * stalls at 0%.
+   */
+  base64: string;
 }
 export interface UploadCancelMessage {
   type: "cancel";
@@ -339,7 +345,7 @@ export function isUploadStartMessage(value: unknown): value is UploadStartMessag
     typeof v.visibility === "string" &&
     typeof v.allowReplies === "boolean" &&
     typeof v.allowReactions === "boolean" &&
-    v.bytes instanceof ArrayBuffer
+    typeof v.base64 === "string"
   );
 }
 export function isUploadCancelMessage(value: unknown): value is UploadCancelMessage {

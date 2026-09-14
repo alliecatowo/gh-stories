@@ -41,6 +41,18 @@ describe('runtime message sender validation', () => {
     expect(isTrustedSender(undefined, OWN_ID)).toBe(false);
   });
 
+  it('accepts our own extension pages opened in a TAB', () => {
+    // options_ui.open_in_tab makes the settings page a real tab. A tab-first
+    // trust rule rejected it and the settings page could not talk to the
+    // background at all.
+    expect(
+      isTrustedSender(
+        { id: OWN_ID, tab: { id: 12 }, url: `chrome-extension://${OWN_ID}/options.html` } as never,
+        OWN_ID,
+      ),
+    ).toBe(true);
+  });
+
   it('accepts our own extension pages', () => {
     expect(
       isTrustedSender(

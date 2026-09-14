@@ -287,9 +287,12 @@ test.describe('browser extension', () => {
       const page = await context.newPage();
       // No github.com tab at all: the popup must still work.
       await page.goto(`chrome-extension://${extensionId}/popup.html`);
-      await expect(page.locator('body')).toContainText(/Stories|Post|Inbox|Settings/i, {
-        timeout: 15_000,
-      });
+      // Strict: the signed-OUT screen also contains the word "Stories", so
+      // assert the actual signed-in tab strip instead.
+      await expect(page.getByRole('tab', { name: /^stories$/i })).toBeVisible({ timeout: 15_000 });
+      for (const tab of ['Post', 'Inbox', 'Settings']) {
+        await expect(page.getByRole('tab', { name: new RegExp(`^${tab}$`, 'i') })).toBeVisible();
+      }
       await shot(page, 'extension-popup');
     } finally {
       await context.close();
@@ -450,6 +453,80 @@ test.describe('viewer and dashboard', () => {
       expect([dark, light].some((v) => v !== null),
         'the ring host should carry a colour mode it can follow').toBe(true);
       if (dark !== null && light !== null) expect(light).not.toBe(dark);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+test.describe('posting from the browser', () => {
+  test('@visual composes and publishes a Story, and it appears in the feed', async () => {
+    test.setTimeout(120_000);
+    const { context, extensionId } = await launch();
+    try {
+      await signIn(context, extensionId);
+      const page = await context.newPage();
+      await page.goto(`chrome-extension://${extensionId}/popup.html`);
+
+      // Post tab.
+      await page.getByRole('tab', { name: /^post$/i }).click();
+
+      // The file input lives inside the composer's picker label.
+      const input = page.locator('input[type="file"]');
+      await expect(input).toBeAttached({ timeout: 15_000 });
+      await input.setInputFiles(
+        resolve(import.meta.dirname, '../../../tests/fixtures/samples/food.jpg'),
+      );
+
+      // Preview appears, and the audience is stated in plain language BEFORE
+      // anything is published.
+      await expect(page.locator('.ghs-composer__preview')).toBeVisible({ timeout: 15_000 });
+      await shot(page, 'extension-composer');
+
+      const body = await page.locator('body').innerText();
+      expect(body, 'the audience must be stated in plain language before posting')
+        .toMatch(/People I follow|My followers|Mutuals|Public/i);
+
+      // Caption and accessibility description.
+      const caption = page.getByLabel(/caption/i);
+      if (await caption.count()) await caption.first().fill('worth the queue');
+      const description = page.getByLabel(/description/i);
+      if (await description.count()) await description.first().fill('A bowl of noodles');
+
+      // Publish. The composer's own Post button, not the tab.
+      await page.locator('.ghs-composer__post').click();
+
+      // Scoped to the composer's own status region. The instructional copy
+      // contains the word "published", so asserting against the whole body
+      // would pass without anything actually being posted.
+      const status = page.locator('.ghs-composer__status');
+      await expect(status).toBeVisible({ timeout: 30_000 });
+
+      // A successful upload is NOT yet "posted": processing is shown first.
+      await expect
+        .poll(async () => (await status.innerText()).toLowerCase(), { timeout: 90_000 })
+        .toMatch(/processing|posted/);
+
+      await expect
+        .poll(async () => (await status.innerText()).toLowerCase(), { timeout: 90_000 })
+        .toContain('posted');
+
+      await shot(page, 'extension-composer-published');
+
+      // And the Story must genuinely exist on the service, not merely look
+      // posted in the UI.
+      const s = session();
+      const mine = await page.evaluate(
+        async ([svc, token]) => {
+          const res = await fetch(`${svc}/v1/stories/mine`, {
+            headers: { authorization: `Bearer ${token}` },
+          });
+          return res.json();
+        },
+        [s.service, s.alice.token] as const,
+      );
+      const captions = (mine?.items ?? []).map((i: { caption?: string }) => i.caption ?? '');
+      expect(captions, 'the posted Story must exist on the service').toContain('worth the queue');
     } finally {
       await context.close();
     }

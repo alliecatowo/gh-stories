@@ -142,7 +142,8 @@ export async function runUploadFlow(
     );
 
     send({ type: "progress", phase: "uploading", loaded: 0, total: message.byteSize });
-    await putWithProgress(intent.url, intent.headers, message.bytes, controller.signal, (loaded, total) => {
+    const bytes = decodeBase64(message.base64);
+    await putWithProgress(intent.url, intent.headers, bytes, controller.signal, (loaded, total) => {
       send({ type: "progress", phase: "uploading", loaded, total });
     });
 
@@ -151,7 +152,7 @@ export async function runUploadFlow(
       return;
     }
 
-    const checksum = await sha256Hex(message.bytes);
+    const checksum = await sha256Hex(bytes);
     send({ type: "phase", phase: "processing" });
     const story = await apiClient.finalizeUpload(
       intent.upload_id,
@@ -202,4 +203,12 @@ async function pollUntilSettled(apiClient: ApiClient, storyId: string | undefine
       );
     });
   }
+}
+
+/** Turns the base64 the composer sent into the raw bytes to upload. */
+function decodeBase64(value: string): ArrayBuffer {
+  const binary = atob(value);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+  return out.buffer;
 }

@@ -27,31 +27,37 @@ export function isTrustedSender(
   if (!sender) return false;
   if (sender.id !== ownExtensionId) return false;
 
-  if (sender.tab) {
-    if (!sender.url) return false;
-    let origin: string;
-    try {
-      origin = new URL(sender.url).origin;
-    } catch {
-      return false;
-    }
-    return origin === GITHUB_ORIGIN;
+  const url = parseURL(sender.url);
+
+  // Our own extension pages (popup, options) are trusted wherever they run.
+  //
+  // This check must come BEFORE the tab check: `options_ui.open_in_tab` makes
+  // the options page a real tab, so `sender.tab` is set and a tab-first rule
+  // would demand a github.com origin and reject the extension's own settings
+  // page — which is exactly what happened.
+  if (url && (url.protocol === "chrome-extension:" || url.protocol === "moz-extension:")) {
+    return url.host === ownExtensionId;
   }
 
-  // No `sender.tab` means this came from an extension page (popup, options,
-  // or the background itself never receives its own messages this way).
-  // Extension-page senders report `sender.url` as a chrome-extension:// /
-  // moz-extension:// URL; confirm it belongs to us when present.
-  if (sender.url) {
-    try {
-      const url = new URL(sender.url);
-      if (url.protocol !== "chrome-extension:" && url.protocol !== "moz-extension:") return false;
-      if (url.host !== ownExtensionId) return false;
-    } catch {
-      return false;
-    }
+  // Anything else claiming to be a page must be a github.com content script.
+  // The content script is only registered for https://github.com/*, but that
+  // registration alone is not trusted.
+  if (sender.tab) {
+    return url?.origin === GITHUB_ORIGIN;
   }
-  return true;
+
+  // No tab and no URL: an internal sender. Anything with a URL that reached
+  // here is neither one of our pages nor a GitHub content script.
+  return !sender.url;
+}
+
+function parseURL(value: string | undefined): URL | null {
+  if (!value) return null;
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
 }
 
 /** Same trust rule, applied to `runtime.onConnect` ports (used for uploads). */

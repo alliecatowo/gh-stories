@@ -69,13 +69,22 @@ export function ComposerBridge(props: ComposerBridgeProps): React.JSX.Element | 
   };
 
   async function submit(draft: ComposerDraft): Promise<void> {
-    const bytes = await draft.file.arrayBuffer();
+    const buffer = await draft.file.arrayBuffer();
+    // Ports serialise with JSON, so the bytes travel as base64. Chunked,
+    // because a spread over a video-sized array blows the call stack.
+    const view = new Uint8Array(buffer);
+    let binary = "";
+    const CHUNK = 0x8000;
+    for (let i = 0; i < view.length; i += CHUNK) {
+      binary += String.fromCharCode(...view.subarray(i, i + CHUNK));
+    }
+    const base64 = btoa(binary);
     if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
     const start: UploadStartMessage = {
       type: "start",
       idempotencyKey: idempotencyKeyRef.current,
       mime: draft.file.type || "application/octet-stream",
-      byteSize: bytes.byteLength,
+      byteSize: buffer.byteLength,
       filename: draft.filename,
       caption: draft.caption,
       altText: draft.altText,
@@ -83,7 +92,7 @@ export function ComposerBridge(props: ComposerBridgeProps): React.JSX.Element | 
       audienceListId: draft.audienceListId,
       allowReplies: draft.allowReplies,
       allowReactions: draft.allowReactions,
-      bytes,
+      base64,
     };
 
     await new Promise<void>((resolve, reject) => {
