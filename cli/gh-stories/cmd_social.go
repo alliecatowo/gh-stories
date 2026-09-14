@@ -72,6 +72,11 @@ func cmdSettings(ctx context.Context, args []string) error {
 	hide := fs.String("hide-from", "", "hide your Stories from @login")
 	unhide := fs.String("unhide-from", "", "stop hiding your Stories from @login")
 	revoke := fs.String("revoke-session", "", "revoke a session by id")
+	createList := fs.String("create-list", "", "create a custom audience list with this name")
+	deleteList := fs.String("delete-list", "", "delete the custom audience list with this name")
+	setListMembers := fs.String("list", "", "the custom audience list to change members of")
+	members := fs.String("members", "",
+		"comma-separated logins for --create-list or --list, e.g. @maya,@sam")
 	if err := fs.Parse(args); err != nil {
 		return usagef("gh stories settings [--default-audience …] [--replies on|off]")
 	}
@@ -98,6 +103,68 @@ func cmdSettings(ctx context.Context, args []string) error {
 			return err
 		}
 		status("Session revoked.")
+	}
+
+	// Distinguish "--members was not given" from "--members was given as
+	// empty": the second is how you empty a list, and Go's flag package
+	// cannot tell them apart from the value alone.
+	membersProvided := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "members" {
+			membersProvided = true
+		}
+	})
+	memberLogins := parseMembers(*members)
+
+	if *createList != "" {
+		list, err := sess.Client.CreateAudienceList(ctx, *createList, memberLogins)
+		if err != nil {
+			return err
+		}
+		status("Created the list %q with %d member(s).",
+			terminal.SanitizeTruncate(list.Name, 60), list.MemberCount)
+		if len(memberLogins) > list.MemberCount {
+			status("Some logins were skipped because no such account has signed up yet.")
+		}
+	}
+
+	if *setListMembers != "" {
+		list, err := findAudienceList(ctx, sess, *setListMembers)
+		if err != nil {
+			return err
+		}
+		if !membersProvided {
+			return usagef("say who should be on the list: --list %q --members @maya,@sam "+
+				"(use --members \"\" to empty it)", *setListMembers)
+		}
+		if memberLogins == nil {
+			// An explicitly empty list is allowed; make it unambiguous to the
+			// API that members are being replaced, not left alone.
+			memberLogins = []string{}
+		}
+		updated, err := sess.Client.UpdateAudienceList(ctx, list.ID, nil, memberLogins)
+		if err != nil {
+			return err
+		}
+		if updated.MemberCount == 0 {
+			status("%q is now empty. Nobody can see Stories posted to it.",
+				terminal.SanitizeTruncate(updated.Name, 60))
+		} else {
+			status("%q now has %d member(s).",
+				terminal.SanitizeTruncate(updated.Name, 60), updated.MemberCount)
+		}
+	}
+
+	if *deleteList != "" {
+		list, err := findAudienceList(ctx, sess, *deleteList)
+		if err != nil {
+			return err
+		}
+		if err := sess.Client.DeleteAudienceList(ctx, list.ID); err != nil {
+			return err
+		}
+		status("Deleted the list %q. Stories already posted to it keep their audience.",
+			terminal.SanitizeTruncate(list.Name, 60))
 	}
 
 	upd := map[string]any{}
@@ -148,12 +215,21 @@ func cmdSettings(ctx context.Context, args []string) error {
 	out("Every Story disappears 24 hours after it is published.")
 	out("Private replies are kept for %d days, then deleted.", settings.ReplyRetentionDays)
 
-	if len(settings.AudienceLists) > 0 {
-		out("")
-		out("Audience lists")
+	out("")
+	out("Audience lists")
+	if len(settings.AudienceLists) == 0 {
+		out("  (none) — create one with: gh stories settings --create-list \"close friends\" --members @maya,@sam")
+	} else {
 		for _, l := range settings.AudienceLists {
-			out("  %-20s %d member(s)", terminal.SanitizeTruncate(l.Name, 20), l.MemberCount)
+			names := make([]string, 0, len(l.Members))
+			for _, m := range l.Members {
+				names = append(names, m.Login)
+			}
+			out("  %-20s %d member(s)  %s", terminal.SanitizeTruncate(l.Name, 20),
+				l.MemberCount, terminal.SanitizeTruncate(strings.Join(names, ", "), 48))
 		}
+		out("")
+		out("  Post to one with: gh stories post photo.jpg --audience list:NAME")
 	}
 	printPeople("Hidden from", settings.HiddenFrom)
 	printPeople("Muted", settings.Muted)
@@ -240,4 +316,41 @@ func settingsUpdate(m map[string]any) cliapi.SettingsUpdate {
 		upd.DefaultAllowReactions = &v
 	}
 	return upd
+}
+
+// parseMembers turns "@maya, sam" into ["maya","sam"].
+func parseMembers(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if login := strings.TrimPrefix(strings.TrimSpace(p), "@"); login != "" {
+			out = append(out, login)
+		}
+	}
+	return out
+}
+
+// findAudienceList resolves a list by name, case-insensitively.
+func findAudienceList(ctx context.Context, sess *session, name string) (*cliapi.AudienceList, error) {
+	lists, err := sess.Client.AudienceLists(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range lists {
+		if strings.EqualFold(lists[i].Name, name) {
+			return &lists[i], nil
+		}
+	}
+	available := make([]string, 0, len(lists))
+	for _, l := range lists {
+		available = append(available, l.Name)
+	}
+	if len(available) == 0 {
+		return nil, fmt.Errorf("you have no audience lists yet. Create one with: gh stories settings --create-list %q", name)
+	}
+	return nil, fmt.Errorf("you have no audience list called %q. You have: %s",
+		name, strings.Join(available, ", "))
 }

@@ -205,6 +205,9 @@ USAGE
   gh stories follow @alice         follow on Stories (never touches GitHub)
   gh stories unfollow|mute|unmute|block|unblock @alice
   gh stories settings              audiences, privacy, sessions
+  gh stories settings --create-list "close friends" --members @maya,@sam
+  gh stories settings --list "close friends" --members @maya
+  gh stories settings --delete-list "close friends"
   gh stories version
 
 GLOBAL FLAGS

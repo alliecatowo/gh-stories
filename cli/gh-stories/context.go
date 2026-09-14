@@ -17,7 +17,11 @@ import (
 	"github.com/alliecatowo/gh-stories/internal/version"
 )
 
-var errNotSignedIn = errors.New("not signed in")
+// errNotSignedIn tells the user what to do, not merely what went wrong.
+// Credentials are stored per service URL, so pointing --service at a
+// different host is legitimately "not signed in" rather than a network fault.
+var errNotSignedIn = errors.New(
+	"you are not signed in to this service. Run: gh stories login")
 var errProcessingFailed = errors.New("media processing failed")
 
 // session carries everything a command needs.

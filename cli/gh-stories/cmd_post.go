@@ -231,16 +231,13 @@ func parseAudience(v string) (visibility, listName string, err error) {
 }
 
 func resolveAudienceList(ctx context.Context, sess *session, name string) (string, error) {
-	lists, err := sess.Client.AudienceLists(ctx)
+	// Shares findAudienceList so the error tells you which lists you DO have,
+	// wherever you hit it.
+	list, err := findAudienceList(ctx, sess, name)
 	if err != nil {
 		return "", err
 	}
-	for _, l := range lists {
-		if strings.EqualFold(l.Name, name) {
-			return l.ID, nil
-		}
-	}
-	return "", fmt.Errorf("you do not have an audience list called %q", name)
+	return list.ID, nil
 }
 
 // maxUpload is the client-side ceiling, matching the service's limit.

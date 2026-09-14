@@ -20,7 +20,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -326,4 +328,60 @@ func (c *client) decodeImage(t *testing.T, storyID, variant string) (image.Image
 	img, format, err := image.Decode(resp.Body)
 	require.NoError(t, err, "the gateway must deliver decodable image bytes")
 	return img, format
+}
+
+// ---------------------------------------------------------------- CLI helpers
+
+var cliBinOnce struct {
+	sync.Once
+	path string
+	err  error
+}
+
+// buildCLI builds the real CLI once per test binary.
+func buildCLI(t *testing.T) string {
+	t.Helper()
+	cliBinOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "gh-stories-cli-")
+		if err != nil {
+			cliBinOnce.err = err
+			return
+		}
+		out := filepath.Join(dir, "gh-stories")
+		cmd := exec.Command("go", "build", "-o", out, "./cli/gh-stories")
+		cmd.Dir = repoRoot(t)
+		if combined, err := cmd.CombinedOutput(); err != nil {
+			cliBinOnce.err = fmt.Errorf("build cli: %v: %s", err, combined)
+			return
+		}
+		cliBinOnce.path = out
+	})
+	require.NoError(t, cliBinOnce.err)
+	return cliBinOnce.path
+}
+
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(mustAbs(t, "."), "..", "..")
+}
+
+func mustAbs(t *testing.T, p string) string {
+	t.Helper()
+	abs, err := filepath.Abs(p)
+	require.NoError(t, err)
+	return abs
+}
+
+// fixture resolves a path under tests/fixtures.
+func fixture(t *testing.T, name string) string {
+	t.Helper()
+	return filepath.Join(repoRoot(t), "tests", "fixtures", name)
+}
+
+func randomSuffix() string { return uuid.NewString()[:8] }
+
+// testdbAccount registers an account and returns its user id.
+func testdbAccount(t *testing.T, e *env, login string, gitHubID int64) uuid.UUID {
+	t.Helper()
+	return testdb.Account(t, e.store, gitHubID, login).ID
 }

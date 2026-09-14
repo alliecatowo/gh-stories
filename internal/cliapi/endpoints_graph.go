@@ -147,3 +147,38 @@ func (c *Client) CreateReport(ctx context.Context, req ReportRequest) (*Report, 
 	}
 	return &out, nil
 }
+
+// CreateAudienceList creates a custom audience (POST /audience-lists).
+func (c *Client) CreateAudienceList(ctx context.Context, name string, logins []string) (*AudienceList, error) {
+	body := struct {
+		Name   string   `json:"name"`
+		Logins []string `json:"logins,omitempty"`
+	}{Name: name, Logins: logins}
+	var out AudienceList
+	if err := c.postJSON(ctx, "/audience-lists", nil, body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UpdateAudienceList renames a list and/or replaces its members
+// (PATCH /audience-lists/{id}). A nil logins slice leaves members untouched.
+func (c *Client) UpdateAudienceList(ctx context.Context, listID string, name *string, logins []string) (*AudienceList, error) {
+	body := map[string]any{}
+	if name != nil {
+		body["name"] = *name
+	}
+	if logins != nil {
+		body["logins"] = logins
+	}
+	var out AudienceList
+	if err := c.patchJSON(ctx, "/audience-lists/"+url.PathEscape(listID), nil, body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DeleteAudienceList removes a list (DELETE /audience-lists/{id}).
+func (c *Client) DeleteAudienceList(ctx context.Context, listID string) error {
+	return c.deleteReq(ctx, "/audience-lists/"+url.PathEscape(listID))
+}
