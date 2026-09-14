@@ -24,6 +24,8 @@ export default defineConfig({
   },
   // Self-contained: the suite serves the built site itself, at the project
   // subpath, so it can run anywhere without a separate setup step.
+  globalSetup: process.env.GHS_SKIP_EXTENSION_SETUP ? undefined : './extension-setup.mjs',
+
   webServer: {
     command: 'node serve-site.mjs',
     url: 'http://localhost:4321/gh-stories/',
@@ -34,7 +36,14 @@ export default defineConfig({
   projects: [
     // Extension scenarios create their own persistent context (see the spec),
     // so they do not use a project-level browser.
-    { name: 'extension', testMatch: /extension\.spec\.ts/ },
+    {
+      name: 'extension',
+      testMatch: /extension\.spec\.ts/,
+      // Builds the extension with the test service in its host permissions and
+      // seeds that service. Without the right origin baked into the manifest
+      // the background cannot reach the service at all.
+      use: {},
+    },
     { name: 'site', testMatch: /site\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
     // Chromium-based so a WebKit download is not required to check narrow
     // layout. Mobile Safari is therefore NOT covered here, and the support

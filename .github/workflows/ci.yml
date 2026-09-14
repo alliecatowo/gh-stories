@@ -89,6 +89,8 @@ jobs:
 
       - name: Visual scenarios (four viewports, real browser)
         run: mise exec -- pnpm --filter @gh-stories/e2e exec playwright test --project=site --project=site-mobile --project=site-360 --project=site-wide
+        env:
+          GHS_SKIP_EXTENSION_SETUP: "1"
 
       # Extension scenarios need the service running and the extension built
       # with a localhost origin in its host permissions.
@@ -116,12 +118,11 @@ jobs:
           GHS_SECRET_KEY: ci-only-secret-key-long-enough-0123456789abcdef
           GHS_TEST_IDENTITY_PROVIDER: "true"
 
+      # The suite builds the extension with the right host permissions and
+      # seeds the service itself, so this is just "run it".
       - name: Extension scenarios (MV3 loaded into a real Chromium)
         run: |
           mise exec -- go build -o gh-stories ./cli/gh-stories
-          GHS_SERVICE_ORIGIN='http://localhost:8787/*' \
-            mise exec -- pnpm --filter @gh-stories/web-extension exec wxt build -b chrome
-          mise exec -- node tests/e2e/extension.setup.mjs
           mise exec -- pnpm --filter @gh-stories/e2e exec playwright test --project=extension
         env:
           GHS_SERVICE_URL: http://localhost:8787

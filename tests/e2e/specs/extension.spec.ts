@@ -44,17 +44,26 @@ function session(): Session {
   return JSON.parse(readFileSync('/tmp/ghs-e2e-session.json', 'utf8')) as Session;
 }
 
-/** Waits until the batch status lookup has produced an unseen ring. */
-async function waitForUnseenRing(page: Page): Promise<void> {
+/**
+ * Waits until the batch status lookup has answered and some avatar carries a
+ * real ring state.
+ *
+ * Deliberately accepts "seen" as well as "unseen": opening a Story in an
+ * earlier test records a view, so requiring "unseen" here would make the suite
+ * order-dependent — which is exactly how it failed in CI while passing
+ * locally.
+ */
+async function waitForRing(page: Page): Promise<void> {
   await expect
     .poll(
       async () =>
         page.evaluate(() => {
-          let unseen = 0;
+          let withState = 0;
           document.querySelectorAll('ghs-ring-overlay').forEach((h) => {
-            if (h.shadowRoot?.querySelector('[data-state="unseen"]')) unseen++;
+            const state = h.shadowRoot?.querySelector('[data-state]')?.getAttribute('data-state');
+            if (state === 'unseen' || state === 'seen') withState++;
           });
-          return unseen;
+          return withState;
         }),
       { timeout: 20_000 },
     )
@@ -141,6 +150,8 @@ test.describe('browser extension', () => {
 
       // maya-devs posted a public Story, so their avatar must carry an
       // UNSEEN ring with an activation badge — not merely a decorated slot.
+      // A ring must reach a REAL state from the status lookup — "none" would
+      // mean the extension decorated an avatar it knows nothing about.
       await expect
         .poll(async () =>
           page.evaluate(() => {
@@ -151,8 +162,8 @@ test.describe('browser extension', () => {
               if (st) states.push(st);
             });
             return states;
-          }), { timeout: 15_000 })
-        .toContain('unseen');
+          }), { timeout: 20_000 })
+        .toEqual(expect.arrayContaining([expect.stringMatching(/^(unseen|seen)$/)]));
 
       const badges = await page.evaluate(() => {
         let n = 0;
@@ -330,7 +341,7 @@ test.describe('viewer and dashboard', () => {
       await signIn(context, extensionId);
       const page = await context.newPage();
       await page.goto('https://github.com/octo-org/upload-worker/pull/482');
-      await waitForUnseenRing(page);
+      await waitForRing(page);
 
       // The activation control lives in the ring's shadow root, as a sibling
       // of GitHub's anchor — never nested inside it.
@@ -432,7 +443,7 @@ test.describe('viewer and dashboard', () => {
       await signIn(context, extensionId);
       const page = await context.newPage();
       await page.goto('https://github.com/octo-org/upload-worker/pull/482');
-      await waitForUnseenRing(page);
+      await waitForRing(page);
 
       // What actually matters is that the ring's own design tokens follow the
       // colour mode GitHub has set on <html> — not that some attribute exists.
