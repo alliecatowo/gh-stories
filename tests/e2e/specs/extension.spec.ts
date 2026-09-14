@@ -434,25 +434,26 @@ test.describe('viewer and dashboard', () => {
       await page.goto('https://github.com/octo-org/upload-worker/pull/482');
       await waitForUnseenRing(page);
 
-      const modeOf = () =>
+      // What actually matters is that the ring's own design tokens follow the
+      // colour mode GitHub has set on <html> — not that some attribute exists.
+      const canvasToken = () =>
         page.evaluate(() => {
-          const host = document.querySelector('ghs-ring-overlay') as HTMLElement | null;
-          return host?.dataset.colorMode ?? host?.getAttribute('data-color-mode') ?? null;
+          const host = document.querySelector('ghs-ring-overlay');
+          const root = host?.shadowRoot?.querySelector('.ghs-root');
+          if (!root) return null;
+          return getComputedStyle(root).getPropertyValue('--ghs-canvas').trim();
         });
 
-      const dark = await modeOf();
+      await page.evaluate(() => document.documentElement.setAttribute('data-color-mode', 'dark'));
+      await expect.poll(canvasToken, { timeout: 10_000 }).not.toBeNull();
+      const dark = await canvasToken();
 
-      // GitHub switches its own colour mode on <html>; the extension must
-      // follow it rather than guessing from prefers-color-scheme.
-      await page.evaluate(() => {
-        document.documentElement.setAttribute('data-color-mode', 'light');
-      });
-      await page.waitForTimeout(1500);
-      const light = await modeOf();
+      await page.evaluate(() => document.documentElement.setAttribute('data-color-mode', 'light'));
+      await expect.poll(canvasToken, { timeout: 10_000 }).not.toBe(dark);
+      const light = await canvasToken();
 
-      expect([dark, light].some((v) => v !== null),
-        'the ring host should carry a colour mode it can follow').toBe(true);
-      if (dark !== null && light !== null) expect(light).not.toBe(dark);
+      expect(dark, 'dark mode should resolve GitHub\'s dark canvas').toBe('#0d1117');
+      expect(light, 'light mode should resolve GitHub\'s light canvas').toBe('#fff');
     } finally {
       await context.close();
     }
