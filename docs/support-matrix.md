@@ -65,10 +65,15 @@ captures 0.35 s apart across five consecutive intervals. Captures in
 
 | Browser | Built | Exercised | Visually verified |
 |---|---|---|---|
-| Chromium (MV3) | ✅ | ✅ typecheck, unit tests, packaged | — |
-| Edge (MV3) | ✅ | — | — |
-| Firefox (MV2) | ✅ | — | — (see [blockers #5](blockers.md)) |
+| Chromium (MV3) | ✅ | ✅ **loaded into a real Chromium** — rings on GitHub avatars, viewer opened from a ring with real media, posting a Story end to end, dashboard row, popup, colour-mode following, API-outage resilience | ✅ |
+| Edge (MV3) | ✅ | ✅ built manifest validated (permissions, hosts, icons, CSP) | — |
+| Firefox (MV2) | ✅ | ✅ built manifest validated, including the gecko add-on id and MV2 background/browser_action shape | — (see [blockers #5](blockers.md)) |
 | Safari | — | — | — (explicitly out of scope) |
+
+The Chromium row is the only one where the extension was actually **run**.
+Edge and Firefox are built and their packaged manifests are validated, but
+neither was loaded into its browser, so neither is claimed as exercised in a
+browser.
 
 WXT produces MV2 for Firefox by default, and that is what is packaged. The
 Chromium and Edge packages are MV3.

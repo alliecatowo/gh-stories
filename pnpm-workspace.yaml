@@ -5,3 +5,5 @@ packages:
   - "tests/e2e"
 allowBuilds:
   esbuild: true
+  spawn-sync: set this to true or false
+
