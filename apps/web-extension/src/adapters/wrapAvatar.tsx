@@ -40,6 +40,47 @@ const OVERLAY_CSS = `
 .ghs-ring-overlay-root { position: absolute; inset: 0; pointer-events: none; }
 .ghs-ring-overlay-root .ghs-story-ring { pointer-events: none; }
 .ghs-ring-overlay-root .ghs-story-ring__avatar { visibility: hidden; }
+/* As an overlay the ring must be a true annulus: GitHub's real avatar sits
+   underneath and has to show through the middle.
+   StoryRing normally draws a gradient-FILLED circle and masks its centre with
+   an opaque gap disc, which as an overlay would paint a solid circle straight
+   over the person. Instead the gradient is confined to the border box and the
+   padding box is masked out, leaving a ring with a genuinely transparent
+   centre. */
+.ghs-ring-overlay-root .ghs-story-ring__gap { background: transparent; }
+
+.ghs-ring-overlay-root .ghs-story-ring__frame {
+  background-color: transparent;
+  background-image: none;
+  border: 2.5px solid transparent;
+  border-radius: 999px;
+  /* Confine the gradient to the border box, then mask the padding box away.
+     What survives is the border ring alone, so the avatar underneath is
+     genuinely visible through the middle. */
+  background-origin: border-box;
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.ghs-ring-overlay-root .ghs-story-ring__frame[data-state="unseen"] {
+  background-image: linear-gradient(135deg, var(--ghs-ring-unseen-start, #e5486f), var(--ghs-ring-unseen-end, #f0883e));
+}
+.ghs-ring-overlay-root .ghs-story-ring__frame[data-state="seen"] {
+  background-image: linear-gradient(var(--ghs-ring-seen, #8c959f) 0 0);
+}
+.ghs-ring-overlay-root .ghs-story-ring__frame[data-state="muted"] {
+  background-image: linear-gradient(var(--ghs-ring-muted, #8c959f) 0 0);
+  border-style: dashed;
+}
+.ghs-ring-overlay-root .ghs-story-ring__frame[data-state="none"] {
+  background-image: none;
+}
+
 .ghs-ring-overlay-badge {
   position: absolute;
   right: -1px;
@@ -76,7 +117,11 @@ export function wrapAvatarWithRing(identity: AccountIdentity, options: WrapAvata
   anchor.style.justifyContent = "center";
 
   const mount = createShadowMount({ tagName: "ghs-ring-overlay", extraCss: OVERLAY_CSS });
-  mount.host.style.cssText = "position:absolute; inset:0;";
+  // pointer-events:none on the HOST itself, not just on the root inside the
+  // shadow: the host covers the whole avatar, so with default pointer events
+  // it silently swallows every click, modified-click and context-menu meant
+  // for GitHub's profile link. The badge re-enables pointer events for itself.
+  mount.host.style.cssText = "position:absolute; inset:0; pointer-events:none;";
   slot.appendChild(mount.host);
   const stopTheme = observeGithubTheme(mount.host);
 

@@ -32,13 +32,16 @@ export default defineConfig({
   },
 
   projects: [
-    { name: 'site', use: { ...devices['Desktop Chrome'] } },
+    // Extension scenarios create their own persistent context (see the spec),
+    // so they do not use a project-level browser.
+    { name: 'extension', testMatch: /extension\.spec\.ts/ },
+    { name: 'site', testMatch: /site\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
     // Chromium-based so a WebKit download is not required to check narrow
     // layout. Mobile Safari is therefore NOT covered here, and the support
     // matrix says so rather than implying it was tested.
-    { name: 'site-mobile', use: { ...devices['Pixel 7'] } },
+    { name: 'site-mobile', testMatch: /site\.spec\.ts/, use: { ...devices['Pixel 7'] } },
     // The narrowest width the brief asks for, explicitly.
-    { name: 'site-360', use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 780 } } },
-    { name: 'site-wide', use: { ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } } },
+    { name: 'site-360', testMatch: /site\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 780 } } },
+    { name: 'site-wide', testMatch: /site\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } } },
   ],
 });

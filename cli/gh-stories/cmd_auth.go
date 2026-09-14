@@ -193,6 +193,13 @@ func cmdSetup(ctx context.Context, args []string) error {
 	return nil
 }
 
+// existingAlias reports an alias already bound to name.
+//
+// `gh alias list` has used both "name<TAB>expansion" and "name: expansion"
+// across versions, so both are accepted. Getting this wrong is not cosmetic:
+// a missed alias falls through to the "is this a real gh command" check, which
+// answers yes precisely BECAUSE the alias resolves — and the user is then told
+// something false about their own configuration.
 func existingAlias(ctx context.Context, name string) (string, bool) {
 	cmd := exec.CommandContext(ctx, "gh", "alias", "list")
 	output, err := cmd.Output()
@@ -200,9 +207,20 @@ func existingAlias(ctx context.Context, name string) (string, bool) {
 		return "", false
 	}
 	for _, line := range strings.Split(string(output), "\n") {
-		fields := strings.SplitN(strings.TrimSpace(line), "\t", 2)
-		if len(fields) == 2 && strings.TrimSuffix(strings.TrimSpace(fields[0]), ":") == name {
-			return strings.TrimSpace(fields[1]), true
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var key, expansion string
+		if k, rest, ok := strings.Cut(line, "\t"); ok {
+			key, expansion = k, rest
+		} else if k, rest, ok := strings.Cut(line, ":"); ok {
+			key, expansion = k, rest
+		} else {
+			continue
+		}
+		if strings.TrimSpace(strings.TrimSuffix(key, ":")) == name {
+			return strings.TrimSpace(expansion), true
 		}
 	}
 	return "", false

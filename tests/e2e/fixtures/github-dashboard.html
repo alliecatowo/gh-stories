@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- Fictional GitHub-like dashboard. Not a scrape; no real accounts. -->
+<html lang="en" data-color-mode="dark" data-dark-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>GitHub</title>
+<style>
+  body { margin:0; background:#0d1117; color:#f0f6fc;
+         font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif; }
+  header { padding:12px 24px; border-bottom:1px solid #3d444d; background:#151b23; }
+  .layout { display:grid; grid-template-columns:1fr 320px; gap:24px; max-width:1280px; margin:0 auto; padding:24px; }
+  .feed-item { border:1px solid #3d444d; border-radius:6px; padding:16px; margin-bottom:16px; background:#151b23; }
+  img.avatar { border-radius:50%; }
+</style>
+</head>
+<body>
+<header><strong>GitHub</strong></header>
+<div class="layout">
+  <div data-target="feed-container.feed" id="dashboard-feed">
+    <div class="feed-item">
+      <a class="d-inline-block" href="/alice" data-hovercard-type="user">
+        <img class="avatar avatar-user" src="https://avatars.githubusercontent.com/u/1001?s=64&v=4" alt="@alice" width="32" height="32">
+      </a>
+      <span>alice starred octo-org/upload-worker</span>
+    </div>
+    <div class="feed-item">
+      <a class="d-inline-block" href="/maya-devs" data-hovercard-type="user">
+        <img class="avatar avatar-user" src="https://avatars.githubusercontent.com/u/4242?s=64&v=4" alt="@maya-devs" width="32" height="32">
+      </a>
+      <span>maya-devs opened a pull request</span>
+    </div>
+  </div>
+  <aside><div class="feed-item">Trending</div></aside>
+</div>
+</body>
+</html>

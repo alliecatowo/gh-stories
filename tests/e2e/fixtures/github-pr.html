@@ -1,0 +1,115 @@
+<!doctype html>
+<!--
+  A fictional, hand-written GitHub-like pull request page.
+
+  This is NOT a scrape of github.com and contains no real account, repository
+  or private content. It mirrors the STRUCTURE the adapters target (profile
+  anchors wrapping avatar images sourced from avatars.githubusercontent.com/u/<id>)
+  so the extension is tested against the shape it must survive in the wild.
+-->
+<html lang="en" data-color-mode="dark" data-dark-theme="dark" data-light-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Fix flaky retry in upload worker by maya-devs · Pull Request #482 · octo-org/upload-worker</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0d1117; color:#f0f6fc;
+         font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif; }
+  header.AppHeader { display:flex; align-items:center; gap:16px; padding:12px 24px;
+                     border-bottom:1px solid #3d444d; background:#151b23; }
+  main { max-width:1012px; margin:0 auto; padding:24px; }
+  h1 { font-size:26px; font-weight:400; margin:0 0 8px; }
+  .subtitle { color:#9198a1; margin-bottom:24px; }
+  .TimelineItem { display:flex; gap:16px; padding:16px 0; border-top:1px solid #3d444d; }
+  .TimelineItem-avatar { flex:none; }
+  img.avatar { border-radius:50%; display:block; }
+  .comment { flex:1; border:1px solid #3d444d; border-radius:6px; padding:12px 16px; background:#151b23; }
+  .comment b { color:#f0f6fc; }
+  .Sidebar { float:right; width:256px; }
+  .reviewers { display:flex; gap:8px; margin:8px 0 24px; }
+  a { color:#4493f8; text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .diff { font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;
+          background:#151b23; border:1px solid #3d444d; border-radius:6px; padding:12px; }
+  .add { color:#3fb950; }
+</style>
+</head>
+<body>
+<header class="AppHeader">
+  <span style="font-weight:600">octo-org / upload-worker</span>
+  <nav><a href="/octo-org/upload-worker/pulls">Pull requests</a></nav>
+</header>
+
+<main>
+  <h1>Fix flaky retry in upload worker <span style="color:#9198a1">#482</span></h1>
+  <p class="subtitle">
+    <a class="author" href="/maya-devs" data-hovercard-type="user">maya-devs</a>
+    wants to merge 1 commit into <code>main</code> from <code>fix/retry-jitter</code>
+  </p>
+
+  <h3 style="font-size:14px">Reviewers</h3>
+  <div class="reviewers">
+    <a class="d-inline-block" href="/alice" data-hovercard-type="user">
+      <img class="avatar avatar-user" src="https://avatars.githubusercontent.com/u/1001?s=64&v=4" alt="@alice" width="32" height="32">
+    </a>
+    <a class="d-inline-block" href="/sam" data-hovercard-type="user">
+      <img class="avatar avatar-user" src="https://avatars.githubusercontent.com/u/5150?s=64&v=4" alt="@sam" width="32" height="32">
+    </a>
+    <a class="d-inline-block" href="/apps/dependabot">
+      <img class="avatar" src="https://avatars.githubusercontent.com/in/29110?v=4" alt="dependabot" width="32" height="32">
+    </a>
+  </div>
+
+  <div class="diff">
+@@ -12,7 +12,7 @@ func (w *Worker) upload(ctx context.Context) error {<br>
+<span class="add">+  backoff := jitter(attempt, baseDelay)</span><br>
+<span class="add">+  time.Sleep(backoff)</span>
+  </div>
+
+  <div class="TimelineItem">
+    <div class="TimelineItem-avatar">
+      <a class="d-inline-block" href="/maya-devs" data-hovercard-type="user">
+        <img class="avatar avatar-user" src="https://avatars.githubusercontent.com/u/4242?s=80&v=4" alt="@maya-devs" width="40" height="40">
+      </a>
+    </div>
+    <div class="comment">
+      <b><a href="/maya-devs">maya-devs</a></b> commented 2 hours ago
+      <p>Retries were hammering the same millisecond. This adds jitter.</p>
+    </div>
+  </div>
+
+  <div class="TimelineItem" id="late-comment-anchor">
+    <div class="TimelineItem-avatar">
+      <a class="d-inline-block" href="/alice" data-hovercard-type="user">
+        <img class="avatar avatar-user" src="https://avatars.githubusercontent.com/u/1001?s=80&v=4" alt="@alice" width="40" height="40">
+      </a>
+    </div>
+    <div class="comment">
+      <b><a href="/alice">alice</a></b> commented 1 hour ago
+      <p>Looks good to me.</p>
+    </div>
+  </div>
+</main>
+
+<script>
+  // Stands in for GitHub's client-side navigation and lazily inserted
+  // comments, so the MutationObserver path is exercised.
+  window.__insertLateComment = function (login, id) {
+    const item = document.createElement('div');
+    item.className = 'TimelineItem';
+    item.innerHTML =
+      '<div class="TimelineItem-avatar">' +
+      '<a class="d-inline-block" href="/' + login + '" data-hovercard-type="user">' +
+      '<img class="avatar avatar-user" src="https://avatars.githubusercontent.com/u/' + id +
+      '?s=80&v=4" alt="@' + login + '" width="40" height="40"></a></div>' +
+      '<div class="comment"><b>' + login + '</b> just now<p>Shipping it.</p></div>';
+    document.querySelector('main').appendChild(item);
+    return true;
+  };
+  window.__fireTurboNavigation = function () {
+    document.dispatchEvent(new CustomEvent('turbo:load'));
+    return true;
+  };
+</script>
+</body>
+</html>

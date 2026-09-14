@@ -4,10 +4,17 @@ import { defineConfig } from 'wxt';
 // service and media origins. There is deliberately no <all_urls>, and no
 // broad browsing-history access: the extension only needs to see github.com
 // pages and talk to its own service.
-// The live service the published extension talks to. Self-hosters change this
-// one line and rebuild; the runtime service URL is also overridable from the
-// options page, so a rebuild is only needed to widen host permissions.
-const SERVICE_ORIGIN = 'https://ghstories.fly.dev/*';
+// Node's process is available in this build-time config file.
+declare const process: { env: Record<string, string | undefined> };
+
+// The service origin the built extension is allowed to talk to.
+//
+// Host permissions are baked into the manifest, so pointing the extension at a
+// different service needs a rebuild with GHS_SERVICE_ORIGIN set. The runtime
+// service URL is separately overridable from the options page; the rebuild is
+// only ever needed to WIDEN permissions, which is the conservative direction.
+// End-to-end tests build with a localhost origin for exactly this reason.
+const SERVICE_ORIGIN = process.env.GHS_SERVICE_ORIGIN ?? 'https://ghstories.fly.dev/*';
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
@@ -22,7 +29,11 @@ export default defineConfig({
     //   storage  – the session token and per-account caches, in local storage
     //              only (never sync, which would copy it across devices)
     //   tabs     – opening the authorization tab and detecting its completion
-    permissions: ['storage', 'tabs'],
+    //   alarms   – an MV3 service worker is killed aggressively, so the
+    //              bounded login poll needs an alarm to survive being evicted
+    //              mid-login. Without this permission the worker throws during
+    //              init and never registers its message listener at all.
+    permissions: ['storage', 'tabs', 'alarms'],
     host_permissions: ['https://github.com/*', SERVICE_ORIGIN],
     action: {
       default_title: 'GitHub Stories',
