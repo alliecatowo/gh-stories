@@ -69,7 +69,9 @@ spec:
           name: api
           args: ["api"]
           ports:
-            - name: h2c
+            # http1: the Go server speaks plain HTTP/1.1. Naming this h2c
+            # makes the frontend speak HTTP/2 to it and every request 502s.
+            - name: http1
               containerPort: 8787
           resources:
             limits:

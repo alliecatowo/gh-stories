@@ -35,7 +35,10 @@ RENDERED="$(mktemp -d)"
 trap 'rm -rf "$RENDERED"' EXIT
 
 ghs_step "Rendering manifests for $IMAGE -> $BASE"
-for f in api-service.yaml worker-job.yaml migrate-job.yaml scheduler-jobs.sh; do
+# NOTE: only *.yaml manifests are rendered. Shell scripts read their
+# configuration from the environment at runtime; running sed over them would
+# rewrite their own variable references (GHS_GCP_PROJECT, ...).
+for f in api-service.yaml worker-job.yaml migrate-job.yaml; do
   sed -e "s|ghcr.io/alliecatowo/gh-stories:TAG|${IMAGE}|g" \
       -e "s|SERVICE_HOST|${HOST}|g" \
       -e "s|R2_ACCOUNT_ID|${R2_ACCOUNT}|g" \
@@ -45,20 +48,21 @@ for f in api-service.yaml worker-job.yaml migrate-job.yaml scheduler-jobs.sh; do
     ghs_die "unrendered placeholder left in $f"
   fi
 done
-chmod +x "$RENDERED/scheduler-jobs.sh"
 ghs_ok "manifests rendered"
 
 ghs_step "Migrations, exactly once (gh-stories-migrate job)"
-if gcloud run jobs describe "gh-stories-migrate" --project="$PROJECT" --region="$REGION" >/dev/null 2>&1; then
-  gcloud run jobs replace "$RENDERED/migrate-job.yaml" --project="$PROJECT" --region="$REGION"
-else
+if ! gcloud run jobs describe "gh-stories-migrate" --project="$PROJECT" --region="$REGION" >/dev/null 2>&1; then
+  # Created bare, then replaced below with the fully rendered manifest so the
+  # first deploy gets the exact same env, secrets and service account as
+  # every later one.
   gcloud run jobs create "gh-stories-migrate" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
-    --args="migrate" --task-timeout=300 --max-retries=0
+    --args="migrate" --task-timeout=300 --max-retries=0 >/dev/null
 fi
+gcloud run jobs replace "$RENDERED/migrate-job.yaml" --project="$PROJECT" --region="$REGION" >/dev/null
 EXEC="$(gcloud run jobs execute "gh-stories-migrate" --project="$PROJECT" \
   --region="$REGION" --wait --format='value(metadata.name)')"
 ghs_info "migration execution: $EXEC"
-STATUS="$(gcloud run executions describe "$EXEC" --project="$PROJECT" \
+STATUS="$(gcloud run jobs executions describe "$EXEC" --project="$PROJECT" \
   --region="$REGION" --format='value(status.conditions[0].type)')"
 [ "$STATUS" = "Completed" ] || ghs_die "migrations did not complete (status: $STATUS)"
 ghs_ok "migrations applied"
@@ -74,14 +78,13 @@ gcloud run services add-iam-policy-binding "$SERVICE" \
 ghs_ok "API deployed (public invoker)"
 
 ghs_step "Upserting worker job + schedules"
-if gcloud run jobs describe "$WORKER_JOB" --project="$PROJECT" --region="$REGION" >/dev/null 2>&1; then
-  gcloud run jobs replace "$RENDERED/worker-job.yaml" --project="$PROJECT" --region="$REGION"
-else
+if ! gcloud run jobs describe "$WORKER_JOB" --project="$PROJECT" --region="$REGION" >/dev/null 2>&1; then
   gcloud run jobs create "$WORKER_JOB" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
-    --args="worker,-once,-max-jobs=50,-max-duration=8m" --task-timeout=600 --max-retries=2
+    --args="worker,-once,-max-jobs=50,-max-duration=8m" --task-timeout=600 --max-retries=2 >/dev/null
 fi
+gcloud run jobs replace "$RENDERED/worker-job.yaml" --project="$PROJECT" --region="$REGION" >/dev/null
 GHS_GCP_PROJECT="$PROJECT" GHS_REGION="$REGION" GHS_WORKER_JOB="$WORKER_JOB" \
-  bash "$RENDERED/scheduler-jobs.sh"
+  bash "$DEPLOY_DIR/scheduler-jobs.sh"
 ghs_ok "worker job + schedules up to date"
 
 ghs_step "Verifying $BASE"

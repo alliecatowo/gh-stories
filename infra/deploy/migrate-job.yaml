@@ -13,10 +13,10 @@ spec:
   template:
     spec:
       taskCount: 1
-      maxRetries: 0
-      timeout: 300s
       template:
         spec:
+          maxRetries: 0
+          timeoutSeconds: 300
           serviceAccountName: gh-stories-worker@GHS_GCP_PROJECT.iam.gserviceaccount.com
           containers:
             - image: ghcr.io/alliecatowo/gh-stories:TAG
@@ -58,4 +58,14 @@ spec:
                   valueFrom:
                     secretKeyRef:
                       name: ghs-production-secret-key
+                      key: latest
+                - name: GHS_GITHUB_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-github-client-id
+                      key: latest
+                - name: GHS_GITHUB_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-github-client-secret
                       key: latest

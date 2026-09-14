@@ -31,10 +31,10 @@ spec:
   template:
     spec:
       taskCount: 1
-      maxRetries: 2
-      timeout: 600s
       template:
         spec:
+          maxRetries: 2
+          timeoutSeconds: 600
           serviceAccountName: gh-stories-worker@GHS_GCP_PROJECT.iam.gserviceaccount.com
           containers:
             - image: ghcr.io/alliecatowo/gh-stories:TAG

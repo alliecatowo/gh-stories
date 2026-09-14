@@ -146,11 +146,11 @@ func (s *Store) PurgeViews(ctx context.Context, retention time.Duration) (int, e
 func (s *Store) PurgeExpiredAuth(ctx context.Context) error {
 	now := s.Clock.Now()
 	if _, err := s.pool.Exec(ctx,
-		`DELETE FROM oauth_flows WHERE expires_at < $1 - interval '1 hour'`, now); err != nil {
+		`DELETE FROM oauth_flows WHERE expires_at < $1 - make_interval(secs => 3600)`, now); err != nil {
 		return wrap("purge oauth flows", err)
 	}
 	_, err := s.pool.Exec(ctx,
-		`DELETE FROM pending_logins WHERE expires_at < $1 - interval '1 hour'`, now)
+		`DELETE FROM pending_logins WHERE expires_at < $1 - make_interval(secs => 3600)`, now)
 	return wrap("purge pending logins", err)
 }
 
