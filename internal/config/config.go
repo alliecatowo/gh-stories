@@ -48,6 +48,14 @@ type Config struct {
 	MaxVideoSeconds int
 	MaxImagePixels  int64
 
+	// ModeratorGitHubIDs are the GitHub numeric ids granted moderator access.
+	//
+	// Declared in configuration rather than promoted through the product, so
+	// that moderator status is an operator decision, is visible in the
+	// deployment, and cannot be escalated through any API surface. Identified
+	// by numeric id because logins are renameable.
+	ModeratorGitHubIDs []int64
+
 	// Local/test only. Production startup fails if either is true.
 	TestIdentityProvider bool
 	TestClock            bool
@@ -145,6 +153,19 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 	c.S3ForcePathStyle = boolOf(get("GHS_S3_FORCE_PATH_STYLE", "false"))
 	c.TestIdentityProvider = boolOf(get("GHS_TEST_IDENTITY_PROVIDER", "false"))
 	c.TestClock = boolOf(get("GHS_TEST_CLOCK", "false"))
+
+	for _, raw := range strings.Split(get("GHS_MODERATOR_GITHUB_IDS", ""), ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"GHS_MODERATOR_GITHUB_IDS must be a comma-separated list of GitHub numeric user ids")
+		}
+		c.ModeratorGitHubIDs = append(c.ModeratorGitHubIDs, id)
+	}
 
 	c.MaxUploadBytes = int64Of(get("GHS_MAX_UPLOAD_BYTES", "104857600"))
 	c.MaxVideoSeconds = intOf(get("GHS_MAX_VIDEO_SECONDS", "60"))

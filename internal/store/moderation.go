@@ -67,8 +67,12 @@ func (s *Store) ListReports(ctx context.Context, state string, limit int) ([]Rep
 			return nil, err
 		}
 		r.Reporter.GitHubID = domain.GitHubID(rGH)
+		// Both sides of a report are registered accounts by construction:
+		// reports join users, not bare identities.
+		r.Reporter.Registered = true
 		if sGH != 0 {
 			subject.GitHubID = domain.GitHubID(sGH)
+			subject.Registered = true
 			r.Subject = &subject
 		}
 		out = append(out, r)
@@ -87,14 +91,28 @@ func (s *Store) RecordModerationAction(ctx context.Context, moderator uuid.UUID,
 	if err != nil {
 		return wrap("record moderation action", err)
 	}
-	if reportID != nil {
-		newState := "actioned"
-		if kind == "dismiss_report" {
-			newState = "dismissed"
+
+	if kind == "dismiss_report" {
+		if reportID == nil {
+			return nil
 		}
 		_, err = s.pool.Exec(ctx, `
-			UPDATE reports SET state=$2, resolved_at=now(), resolved_by_user_id=$3
-			WHERE id=$1 AND state='open'`, *reportID, newState, moderator)
+			UPDATE reports SET state='dismissed', resolved_at=now(), resolved_by_user_id=$2
+			WHERE id=$1 AND state='open'`, *reportID, moderator)
+		return wrap("dismiss report", err)
 	}
-	return wrap("resolve report", err)
+
+	// Resolve every open report the action actually addresses, not only the
+	// one the moderator happened to cite. Otherwise removing a Story leaves
+	// its reports open forever and the queue fills with work already done.
+	_, err = s.pool.Exec(ctx, `
+		UPDATE reports SET state='actioned', resolved_at=now(), resolved_by_user_id=$1
+		WHERE state='open' AND (
+			($2::uuid IS NOT NULL AND id = $2::uuid)
+			OR ($3::uuid IS NOT NULL AND story_item_id = $3::uuid)
+			OR ($4::uuid IS NOT NULL AND subject_user_id = $4::uuid)
+			OR ($4::uuid IS NOT NULL AND story_item_id IN (
+				SELECT id FROM story_items WHERE author_user_id = $4::uuid))
+		)`, moderator, reportID, storyID, target)
+	return wrap("resolve reports", err)
 }

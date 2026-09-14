@@ -395,3 +395,82 @@ func TestMediaIsNotShareableCacheable(t *testing.T) {
 	require.Equal(t, "bytes", resp.Header.Get("Accept-Ranges"))
 	require.Equal(t, "nosniff", resp.Header.Get("X-Content-Type-Options"))
 }
+
+// GATE: Moderation. A report reaches a queue only a moderator can see, and
+// actions are recorded and take effect.
+func TestModerationFlow(t *testing.T) {
+	h, alice, bob, carol := trio(t)
+	ctx := t.Context()
+
+	story := h.publish(alice, domain.VisibilityPublic, nil, "reported")
+	id := story.String()
+
+	// Bob reports it.
+	resp := bob.do(http.MethodPost, "/v1/reports", map[string]any{
+		"subject_kind": "story", "story_id": id,
+		"reason": "spam", "details": "unsolicited",
+	})
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	drain(resp)
+
+	// Nobody can reach the queue yet — not even the reporter.
+	for _, who := range []*actor{alice, bob, carol} {
+		r := who.get("/v1/moderation/reports")
+		require.Equal(t, http.StatusNotFound, r.StatusCode,
+			"the moderation queue must not be reachable by ordinary accounts")
+		drain(r)
+	}
+
+	// Carol is appointed a moderator by configuration.
+	granted, _, err := h.store.SyncModerators(ctx, []domain.GitHubID{carol.User.GitHubID})
+	require.NoError(t, err)
+	require.Equal(t, 1, granted)
+
+	queue := decode[struct {
+		Reports []map[string]any `json:"reports"`
+	}](t, carol.get("/v1/moderation/reports"))
+	require.Len(t, queue.Reports, 1)
+	require.Equal(t, "spam", queue.Reports[0]["reason"])
+
+	// A moderator can remove the Story, and it really goes.
+	resp = carol.do(http.MethodPost, "/v1/moderation/actions", map[string]any{
+		"kind": "remove_story", "story_id": id, "reason": "policy",
+	})
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	drain(resp)
+
+	require.Equal(t, http.StatusNotFound, bob.get("/v1/stories/"+id).StatusCode,
+		"a removed Story must stop being served")
+	require.Equal(t, http.StatusNotFound, bob.get("/v1/media/"+id+"/image").StatusCode)
+
+	// Suspension stops the author entirely.
+	resp = carol.do(http.MethodPost, "/v1/moderation/actions", map[string]any{
+		"kind": "suspend_user", "login": "alice", "reason": "repeated",
+	})
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	drain(resp)
+
+	r := alice.get("/v1/feed")
+	require.Equal(t, http.StatusForbidden, r.StatusCode,
+		"a suspended account can neither act nor be seen")
+	drain(r)
+
+	// And the report is resolved rather than left open forever.
+	open := decode[struct {
+		Reports []map[string]any `json:"reports"`
+	}](t, carol.get("/v1/moderation/reports?state=open"))
+	require.Empty(t, open.Reports)
+}
+
+// GATE: A report cannot be used to probe for private Story ids.
+func TestReportingCannotProbeForPrivateStories(t *testing.T) {
+	h, alice, _, carol := trio(t)
+	story := h.publish(alice, domain.VisibilityMutuals, nil, "private")
+
+	resp := carol.do(http.MethodPost, "/v1/reports", map[string]any{
+		"subject_kind": "story", "story_id": story.String(), "reason": "spam",
+	})
+	require.Equal(t, http.StatusNotFound, resp.StatusCode,
+		"reporting a Story you cannot see must be indistinguishable from it not existing")
+	drain(resp)
+}

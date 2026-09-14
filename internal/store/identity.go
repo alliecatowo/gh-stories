@@ -306,3 +306,35 @@ func (s *Store) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
 func (s *Store) TouchSeen(ctx context.Context, userID uuid.UUID, at time.Time) {
 	_, _ = s.pool.Exec(ctx, `UPDATE users SET last_seen_at = $2 WHERE id = $1`, userID, at)
 }
+
+// SyncModerators makes the declared moderator set authoritative.
+//
+// Moderator status is granted by configuration, never through the product, so
+// a compromised account cannot promote itself and an operator can see exactly
+// who has it by reading the deployment. Anyone not on the list is demoted,
+// which is what makes removing an id from the list actually take effect.
+func (s *Store) SyncModerators(ctx context.Context, gitHubIDs []domain.GitHubID) (granted, revoked int, err error) {
+	raw := make([]int64, 0, len(gitHubIDs))
+	for _, id := range gitHubIDs {
+		raw = append(raw, int64(id))
+	}
+	err = s.Tx(ctx, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE users SET is_moderator = true
+			WHERE github_user_id = ANY($1) AND NOT is_moderator`, raw)
+		if err != nil {
+			return wrap("grant moderators", err)
+		}
+		granted = int(tag.RowsAffected())
+
+		tag, err = tx.Exec(ctx, `
+			UPDATE users SET is_moderator = false
+			WHERE is_moderator AND NOT (github_user_id = ANY($1))`, raw)
+		if err != nil {
+			return wrap("revoke moderators", err)
+		}
+		revoked = int(tag.RowsAffected())
+		return nil
+	})
+	return granted, revoked, err
+}

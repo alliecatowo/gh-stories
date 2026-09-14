@@ -87,6 +87,18 @@ func run(logger *slog.Logger, migrateOnly, autoMigrate bool) error {
 	clk := clock.Clock(clock.Real{})
 	st := store.New(pool, clk)
 
+	// Moderator access is granted by configuration, not by anything in the
+	// product. Applying it at startup also revokes anyone no longer listed.
+	modIDs := make([]domain.GitHubID, 0, len(cfg.ModeratorGitHubIDs))
+	for _, id := range cfg.ModeratorGitHubIDs {
+		modIDs = append(modIDs, domain.GitHubID(id))
+	}
+	if granted, revoked, err := st.SyncModerators(ctx, modIDs); err != nil {
+		logger.Warn("could not apply the moderator list", "err", err)
+	} else if granted > 0 || revoked > 0 {
+		logger.Info("moderator list applied", "granted", granted, "revoked", revoked)
+	}
+
 	objects, err := objstore.New(objstore.Config{
 		Endpoint:       cfg.S3Endpoint,
 		Region:         cfg.S3Region,
