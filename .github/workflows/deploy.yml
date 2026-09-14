@@ -1,0 +1,63 @@
+name: Deploy
+
+# Production deployment: tagged image -> migrate once -> deploy API ->
+# verify health + authenticated media round trip.
+#
+# Triggers after a GitHub Release is published (the release workflow owns
+# building the GHCR image), or manually with an existing tag. The image is
+# never built here; this workflow redeploys a published artifact.
+#
+# One-time operator setup (see infra/deploy/README.md):
+#   * vars.GHS_GCP_PROJECT, vars.GHS_REGION, vars.GHS_SERVICE_HOST,
+#     vars.R2_ACCOUNT_ID, vars.GCP_WIF_PROVIDER, vars.GCP_DEPLOYER_SA
+#   * secrets.GHS_VERIFY_TOKEN (a production session token for the
+#     authenticated round trip; rotate after proving the product)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to deploy (e.g. v1.2.3)
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
+
+      - id: auth
+        uses: google-github-actions/auth@4710d381fb6df9d22c94bfcdb9c35c5c18615358 # v3.3.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@305b080e093d3c9037e0767df8a4d638166d0e4 # v3.2.0
+        with:
+          version: ">= 495.0.0"
+
+      - name: Deploy the tagged image
+        env:
+          GHS_GCP_PROJECT: ${{ vars.GHS_GCP_PROJECT }}
+          GHS_REGION: ${{ vars.GHS_REGION }}
+          GHS_SERVICE: gh-stories-api
+          GHS_WORKER_JOB: gh-stories-worker
+          SERVICE_HOST: ${{ vars.GHS_SERVICE_HOST }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          GHS_IMAGE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          GHS_VERIFY_TOKEN: ${{ secrets.GHS_VERIFY_TOKEN }}
+        run: bash scripts/deploy.sh

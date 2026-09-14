@@ -51,6 +51,22 @@ func (s *Server) routes() http.Handler {
 		// runtime outside local/test. A no-op in every release build.
 		s.registerTestRoutes(r)
 
+		// ------------------------------------------------- public stories
+		// A live public Story is world-readable: its metadata, its media and
+		// its render acknowledgement accept anonymous callers. The handlers
+		// resolve everything through PublicStory; any non-public, expired,
+		// deleted, removed or suspended item is the same 404 everywhere.
+		// Everything else under /v1 stays session-gated.
+		r.With(s.limit(ratelimit.RuleRead, "read-public")).Group(func(r chi.Router) {
+			r.Get("/stories/{storyId}", h(s.getStory))
+		})
+		r.With(s.limit(ratelimit.RuleMedia, "media-public")).Group(func(r chi.Router) {
+			r.Get("/media/{storyId}/{variant}", h(s.getMedia))
+			r.Head("/media/{storyId}/{variant}", h(s.getMedia))
+		})
+		r.With(s.limit(ratelimit.RuleMutation, "view-public")).
+			Post("/stories/{storyId}/view", h(s.postView))
+
 		// ------------------------------------------------- authenticated
 		r.Group(func(r chi.Router) {
 			r.Use(requireAuth)
@@ -61,7 +77,6 @@ func (s *Server) routes() http.Handler {
 				r.Get("/stories/mine", h(s.getOwnStories))
 				r.Get("/users/lookup", h(s.getUserLookup))
 				r.Get("/users/{login}/stories", h(s.getAuthorStories))
-				r.Get("/stories/{storyId}", h(s.getStory))
 				r.Get("/stories/{storyId}/viewers", h(s.getViewers))
 				r.Get("/inbox", h(s.getInbox))
 				r.Get("/following", h(s.listFollowing))
@@ -79,12 +94,11 @@ func (s *Server) routes() http.Handler {
 			r.With(s.limit(ratelimit.RuleStatus, "status")).
 				Post("/stories/status", h(s.postStatus))
 
-			// The media gateway re-checks authorization on every request,
-			// including each range request of a video.
-			r.With(s.limit(ratelimit.RuleMedia, "media")).Group(func(r chi.Router) {
-				r.Get("/media/{storyId}/{variant}", h(s.getMedia))
-				r.Head("/media/{storyId}/{variant}", h(s.getMedia))
-			})
+			// Authenticated media goes through the same public gateway
+			// handlers: they serve private bytes with no-store when a
+			// session is present and public bytes with short caching when
+			// it is not. No second route exists, so no weaker rule can
+			// drift in.
 
 			r.With(s.limit(ratelimit.RuleUpload, "upload")).Group(func(r chi.Router) {
 				r.Post("/uploads", h(s.postUpload))
@@ -102,7 +116,6 @@ func (s *Server) routes() http.Handler {
 			r.With(s.limit(ratelimit.RuleMutation, "mutation")).Group(func(r chi.Router) {
 				r.Patch("/stories/{storyId}", h(s.patchStory))
 				r.Delete("/stories/{storyId}", h(s.deleteStory))
-				r.Post("/stories/{storyId}/view", h(s.postView))
 				r.Post("/inbox/read", h(s.postInboxRead))
 				r.Post("/onboarding/import-follows", h(s.postImportFollows))
 

@@ -66,3 +66,35 @@ func (c *Client) Sessions(ctx context.Context) ([]SessionInfo, error) {
 func (c *Client) RevokeSession(ctx context.Context, sessionID string) error {
 	return c.deleteReq(ctx, "/auth/sessions/"+pathEscape(sessionID))
 }
+
+// ImportSummary is the outcome of POST /onboarding/import-follows.
+//
+// Accepting the import cannot be completed by the API alone: the service
+// discards the upstream GitHub token as soon as identity is established, so
+// reading the GitHub follow graph always requires a fresh authorization in a
+// browser. NeedsGitHubAuthorization says so, and AuthorizationURL is where to
+// send the person.
+type ImportSummary struct {
+	Enabled                  bool         `json:"enabled"`
+	Account                  PublicUser   `json:"account"`
+	NeedsGitHubAuthorization bool         `json:"needs_github_authorization"`
+	AuthorizationURL         string       `json:"authorization_url"`
+	Added                    int          `json:"added"`
+	AlreadyFollowing         int          `json:"already_following"`
+	SkippedUnfollowed        int          `json:"skipped_unfollowed"`
+	SkippedBlocked           int          `json:"skipped_blocked"`
+	Sample                   []PublicUser `json:"sample"`
+}
+
+// ImportFollows accepts or declines the GitHub follow import. Declining is
+// applied immediately and reads nothing from GitHub.
+func (c *Client) ImportFollows(ctx context.Context, enabled bool) (*ImportSummary, error) {
+	var out ImportSummary
+	body := struct {
+		Enabled bool `json:"enabled"`
+	}{Enabled: enabled}
+	if err := c.postJSON(ctx, "/onboarding/import-follows", nil, body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

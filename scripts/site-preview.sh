@@ -15,7 +15,8 @@ trap 'rm -rf "$SERVE_ROOT"' EXIT
 mkdir -p "$SERVE_ROOT$BASE"
 cp -R "$DIST"/. "$SERVE_ROOT$BASE/"
 
-ghs_ok "serving apps/site/dist at http://localhost:${PORT}${BASE}/"
+ghs_ok "serving apps/site/dist at http://localhost:${PORT}${BASE}/ (all interfaces, e.g. tailnet)"
 ghs_info "a link that only works without the ${BASE} prefix is a release blocker"
 cd "$SERVE_ROOT"
-ghs_mise python3 -m http.server "$PORT" 2>/dev/null || python3 -m http.server "$PORT"
+# Explicit all-interfaces bind so the preview is reachable over tailnet too.
+ghs_mise python3 -m http.server --bind 0.0.0.0 "$PORT" 2>/dev/null || python3 -m http.server --bind 0.0.0.0 "$PORT"

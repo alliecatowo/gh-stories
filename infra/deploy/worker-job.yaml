@@ -1,0 +1,97 @@
+# GitHub Stories — bounded worker execution as a Cloud Run Job.
+#
+# The worker is a long-running process locally, but in production it runs as
+# a Job: claim a finite batch of media/cleanup jobs, exit cleanly, and be
+# safe to run more than once. Every claim is lease-based and every step is
+# idempotent, so overlapping executions just share the work.
+#
+# Two executions exist:
+#
+#   * gh-stories-worker (args: worker -once) — the media/cleanup batch,
+#     triggered by Cloud Scheduler (see scheduler-jobs.sh) every 2 minutes
+#     for prompt upload processing, plus a 15-minute cleanup sweep. Both
+#     schedules execute this same bounded role; RunOnce alternates media
+#     claims with a cleanup pass per iteration.
+#   * gh-stories-migrate (args: migrate, see migrate-job.yaml) — one-shot
+#     migration, executed exactly once per deployment by scripts/deploy.sh
+#     before the API rolls. Never scheduled.
+#
+# Task count is 1 and retries are bounded: a poisoned job exhausts its
+# attempts in the database and is marked failed rather than retried forever
+# by the platform.
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  # GHS_WORKER_JOB, default gh-stories-worker.
+  name: gh-stories-worker
+  labels:
+    app: gh-stories
+    role: worker
+spec:
+  template:
+    spec:
+      taskCount: 1
+      maxRetries: 2
+      timeout: 600s
+      template:
+        spec:
+          serviceAccountName: gh-stories-worker@GHS_GCP_PROJECT.iam.gserviceaccount.com
+          containers:
+            - image: ghcr.io/alliecatowo/gh-stories:TAG
+              name: worker
+              args: ["worker", "-once", "-max-jobs=50", "-max-duration=8m"]
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: 2Gi
+              env:
+                - name: GHS_ENV
+                  value: production
+                - name: GHS_PUBLIC_URL
+                  value: https://SERVICE_HOST
+                - name: GHS_S3_ENDPOINT
+                  value: https://R2_ACCOUNT_ID.r2.cloudflarestorage.com
+                - name: GHS_S3_REGION
+                  value: auto
+                - name: GHS_S3_BUCKET
+                  value: gh-stories-media
+                - name: GHS_S3_FORCE_PATH_STYLE
+                  value: "false"
+                - name: GHS_WORKER_ROLE
+                  value: both
+                - name: GHS_MAX_UPLOAD_BYTES
+                  value: "104857600"
+                - name: GHS_MAX_VIDEO_SECONDS
+                  value: "60"
+                - name: GHS_MAX_IMAGE_PIXELS
+                  value: "50000000"
+                - name: GHS_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-database-url
+                      key: latest
+                - name: GHS_S3_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-r2-access-key-id
+                      key: latest
+                - name: GHS_S3_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-r2-secret-access-key
+                      key: latest
+                - name: GHS_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-secret-key
+                      key: latest
+                - name: GHS_GITHUB_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-github-client-id
+                      key: latest
+                - name: GHS_GITHUB_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-github-client-secret
+                      key: latest

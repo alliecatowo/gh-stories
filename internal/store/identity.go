@@ -237,7 +237,7 @@ func (s *Store) EnsureUser(ctx context.Context, tx pgx.Tx, id domain.Identity) (
 
 func (s *Store) MarkOnboarded(ctx context.Context, tx pgx.Tx, userID uuid.UUID) error {
 	_, err := s.q(tx).Exec(ctx,
-		`UPDATE users SET follow_import_completed_at = now() WHERE id = $1`, userID)
+		`UPDATE users SET follow_import_completed_at = $2 WHERE id = $1`, userID, s.Clock.Now())
 	return wrap("mark onboarded", err)
 }
 

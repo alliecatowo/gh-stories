@@ -56,6 +56,8 @@ func dispatch(ctx context.Context, args []string) int {
 		return run(ctx, cmdSetup, args[1:])
 	case "doctor":
 		return run(ctx, cmdDoctor, args[1:])
+	case "import":
+		return run(ctx, cmdImport, args[1:])
 	case "post":
 		return run(ctx, cmdPost, args[1:])
 	case "reply":
@@ -188,6 +190,7 @@ USAGE
   gh stories logout                sign out and revoke this session
   gh stories setup                 offer the singular "gh story" alias
   gh stories doctor                check the service, auth and terminal
+  gh stories import               follow the people you follow on GitHub
 
   gh stories post photo.jpg        post an image
   gh stories post video.mp4        post a video

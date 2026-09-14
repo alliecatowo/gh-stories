@@ -1,5 +1,37 @@
 {{define "home.html"}}{{template "layout" .}}{{end}}
 {{define "content"}}
+{{if eq .Data.ImportState "done"}}
+<div class="card">
+  <b>Imported from GitHub.</b><br>
+  <span class="muted">
+    Now following {{.Data.ImportAdded}} new account(s) on Stories.
+    {{if ne .Data.ImportAlready "0"}}{{.Data.ImportAlready}} you already followed.{{end}}
+    {{if ne .Data.ImportUnfollowed "0"}}{{.Data.ImportUnfollowed}} skipped because you unfollowed them here before.{{end}}
+    {{if ne .Data.ImportBlocked "0"}}{{.Data.ImportBlocked}} skipped because of a block.{{end}}
+    {{with .Data.ImportSample}}<br>For example: {{range $i, $n := .}}{{if $i}}, {{end}}{{$n}}{{end}}.{{end}}
+    <br>This did not change who you follow on GitHub.
+  </span>
+</div>
+{{else if eq .Data.ImportState "failed"}}
+<div class="card err">The import did not complete. Nothing was changed. You can try again below.</div>
+{{end}}
+
+{{if .Data.NeedsOnboarding}}
+<div class="card">
+  <b>Import people you follow on GitHub?</b><br>
+  <span class="muted">You will follow them on Stories too. It never changes anything on GitHub.</span>
+  <form method="get" action="/v1/auth/github/start">
+    <input type="hidden" name="purpose" value="import">
+    <button class="primary" type="submit">Import</button>
+  </form>
+</div>
+{{else}}
+<p class="muted" style="margin-top:0">
+  <a href="/v1/auth/github/start?purpose=import">Re-import people you follow on GitHub</a>
+  — previews nothing you removed here; unfollows stay unfollowed.
+</p>
+{{end}}
+
 <h1>Your Stories</h1>
 <p>Every item disappears 24 hours after it was published. {{with .Data.Unread}}{{if gt . 0}}You have {{.}} unread in your inbox.{{end}}{{end}}</p>
 {{if .Data.Items}}

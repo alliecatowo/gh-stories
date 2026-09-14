@@ -116,8 +116,11 @@ const (
 	VisibilityAuthorFollows Visibility = "author_follows"
 	VisibilityMutuals       Visibility = "mutuals"
 	VisibilityCustomList    Visibility = "custom_list"
-	// VisibilityPublic is "Public — anyone signed in". Identity is still
-	// required, because the product exposes named viewers.
+	// VisibilityPublic is "Public — anyone, no sign-in required". Its
+	// canonical /s/<id> viewer and its media are readable without a
+	// session and can be shared outside GitHub Stories. Anonymous views
+	// are counted in aggregate only; no per-viewer record and no IP
+	// history is retained for anonymous callers.
 	VisibilityPublic Visibility = "public"
 )
 
@@ -142,7 +145,7 @@ func (v Visibility) Label() string {
 	case VisibilityCustomList:
 		return "Custom list"
 	case VisibilityPublic:
-		return "Public — anyone signed in"
+		return "Public — anyone, no sign-in required"
 	}
 	return string(v)
 }
@@ -158,7 +161,7 @@ func (v Visibility) Description() string {
 	case VisibilityCustomList:
 		return "Only the people on the list you choose can see this."
 	case VisibilityPublic:
-		return "Anyone signed in to GitHub Stories can see this."
+		return "Anyone can open the share link without a Stories account."
 	}
 	return ""
 }

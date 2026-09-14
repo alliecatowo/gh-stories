@@ -317,6 +317,61 @@ func (s *Store) StoryForViewer(ctx context.Context, viewer uuid.UUID,
 	return item, nil
 }
 
+// PublicStory returns a Story only if it is publicly visible right now,
+// with no session required. The checks mirror the anonymous-safe subset of
+// visibleToViewer: published, within expiry, author neither suspended nor
+// deleted, and visibility = 'public'. Block/hide/follow rules need a viewer
+// identity and therefore do not apply; a public Story is world-readable by
+// definition. Anything else produces ErrNotFound so anonymous probing cannot
+// distinguish absent, expired, deleted, removed, suspended or non-public.
+func (s *Store) PublicStory(ctx context.Context, storyID uuid.UUID) (*domain.StoryItem, error) {
+	item, err := scanStory(s.pool.QueryRow(ctx, `
+		SELECT `+storySelect+`
+		FROM story_items si
+		JOIN users au ON au.id = si.author_user_id
+		JOIN github_identities gi ON gi.github_user_id = au.github_user_id
+		WHERE si.id = $1
+		  AND si.state = 'published'
+		  AND si.published_at IS NOT NULL
+		  AND si.expires_at IS NOT NULL
+		  AND $2::timestamptz < si.expires_at
+		  AND au.suspended_at IS NULL
+		  AND au.deleted_at IS NULL
+		  AND si.visibility = 'public'`, storyID, s.Clock.Now()))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.loadVariants(ctx, item); err != nil {
+		return nil, err
+	}
+	return item, nil
+}
+
+// RecordAnonymousView increments the aggregate anonymous counter for a public
+// Story. No per-viewer row and no IP address is stored: anonymous views are
+// counted only. Callers must have resolved the Story through PublicStory
+// first; this method re-checks the public predicate in the UPDATE so a
+// visibility narrowing between read and increment cannot inflate the counter
+// for a no-longer-public Story.
+func (s *Store) RecordAnonymousView(ctx context.Context, storyID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE story_items SET anonymous_view_count = anonymous_view_count + 1
+		WHERE id = $1 AND state = 'published'
+		  AND published_at IS NOT NULL AND expires_at IS NOT NULL
+		  AND $2::timestamptz < expires_at
+		  AND visibility = 'public'`, storyID, s.Clock.Now())
+	return wrap("record anonymous view", err)
+}
+
+// AnonymousViewCount returns the aggregate anonymous view counter for a
+// Story. It is shown to the author only, summed with the named viewer count.
+func (s *Store) AnonymousViewCount(ctx context.Context, storyID uuid.UUID) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COALESCE(anonymous_view_count, 0) FROM story_items WHERE id = $1`, storyID).Scan(&n)
+	return n, wrap("anonymous view count", err)
+}
+
 // OwnStory returns the caller's own item in any state, including processing
 // and failed, so a client can poll a publication it started.
 func (s *Store) OwnStory(ctx context.Context, owner uuid.UUID, storyID uuid.UUID) (*domain.StoryItem, error) {

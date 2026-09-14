@@ -1,0 +1,146 @@
+# GitHub Stories — production deployment (Cloud Run + Neon + R2)
+#
+# The first deployment uses the existing Go service image, not a rewrite:
+#
+#   Browser extension / gh stories / public web viewer
+#                        |
+#                        v
+#                Cloud Run API service
+#                        |
+#             +----------+----------+
+#             |                     |
+#             v                     v
+#       Neon Postgres        Cloudflare R2 (private media)
+#             |                     |
+#             +----------+----------+
+#                        |
+#                        v
+#           Cloud Run media/cleanup worker job
+#
+# The Pages site remains static. GitHub OAuth is the identity provider,
+# registered against the production service URL.
+#
+# There are two ways to deploy:
+#
+#   1. scripts/deploy.sh (explicit, local operator run — see infra/deploy/README.md)
+#   2. .github/workflows/deploy.yml (CI on release tags / manual dispatch)
+#
+# Both do the same ordered steps:
+#
+#   build tagged image -> run migrations ONCE -> deploy API ->
+#   verify health + authenticated media round trip
+#
+# Cost controls are real limits, not just alerts: Cloud Run maximum
+# instances, CPU/memory/request limits, upload-size limits and explicit
+# per-service quotas. Budget alerts do NOT cap charges.
+
+# ------------------------------------------------------------------ image
+# The service image is built by the release workflow and published to GHCR:
+# ghcr.io/alliecatowo/gh-stories:<tag>. scripts/deploy.sh redeploys an
+# existing tagged image; it never builds from a laptop. One image, two roles:
+# `api` serves traffic, `worker -once` runs a bounded batch and exits, and
+# `migrate` applies pending migrations and exits.
+
+# ------------------------------------------------------------------- API
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  # GHS_SERVICE, default gh-stories-api.
+  name: gh-stories-api
+  labels:
+    app: gh-stories
+    role: api
+spec:
+  template:
+    metadata:
+      annotations:
+        # Cost controls: hard ceiling on concurrent spend.
+        autoscaling.knative.dev/maxScale: "5"
+        autoscaling.knative.dev/minScale: "0"
+        run.googleapis.com/cpu-throttling: "true"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      # Least privilege: this identity reads exactly the service's secrets
+      # and nothing else. Created by the operator, never committed here.
+      serviceAccountName: gh-stories-api@GHS_GCP_PROJECT.iam.gserviceaccount.com
+      timeoutSeconds: 60
+      containers:
+        - image: ghcr.io/alliecatowo/gh-stories:TAG
+          name: api
+          args: ["api"]
+          ports:
+            - name: h2c
+              containerPort: 8787
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: GHS_ENV
+              value: production
+            - name: GHS_HTTP_ADDR
+              value: ":8787"
+            - name: GHS_PUBLIC_URL
+              value: https://SERVICE_HOST
+            - name: GHS_ALLOWED_ORIGINS
+              value: https://SERVICE_HOST
+            - name: GHS_S3_ENDPOINT
+              value: https://R2_ACCOUNT_ID.r2.cloudflarestorage.com
+            - name: GHS_S3_REGION
+              value: auto
+            - name: GHS_S3_BUCKET
+              value: gh-stories-media
+            - name: GHS_S3_FORCE_PATH_STYLE
+              value: "false"
+            - name: GHS_MAX_UPLOAD_BYTES
+              value: "104857600"
+            - name: GHS_MAX_VIDEO_SECONDS
+              value: "60"
+            - name: GHS_MAX_IMAGE_PIXELS
+              value: "50000000"
+            - name: GHS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ghs-production-database-url
+                  key: latest
+            - name: GHS_S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ghs-production-r2-access-key-id
+                  key: latest
+            - name: GHS_S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ghs-production-r2-secret-access-key
+                  key: latest
+            - name: GHS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ghs-production-secret-key
+                  key: latest
+            - name: GHS_GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ghs-production-github-client-id
+                  key: latest
+            - name: GHS_GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ghs-production-github-client-secret
+                  key: latest
+            - name: GHS_MODERATOR_GITHUB_IDS
+              value: ""
+          startupProbe:
+            httpGet:
+              path: /v1/health/ready
+              port: 8787
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /v1/health/live
+              port: 8787
+            periodSeconds: 30
+  traffic:
+    - percent: 100
+      latestRevision: true

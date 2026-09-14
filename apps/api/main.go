@@ -253,8 +253,12 @@ func (a *authAdapter) ImportFollows(ctx context.Context, userID uuid.UUID,
 	}
 	return &api.ImportSummary{
 		Enabled: enabled, Preview: preview,
-		Added: sum.Added, AlreadyFollowing: sum.AlreadyFollowing,
-		SkippedUnfollowed: sum.SkippedUnfollowed, SkippedBlocked: sum.SkippedBlocked,
+		GitHubFollowingCount: sum.GitHubFollowingCount,
+		Added:                sum.Added,
+		AlreadyFollowing:     sum.AlreadyFollowing,
+		SkippedUnfollowed:    sum.SkippedUnfollowed,
+		SkippedBlocked:       sum.SkippedBlocked,
+		Sample:               sum.Sample,
 	}, nil
 }
 

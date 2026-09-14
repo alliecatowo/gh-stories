@@ -59,6 +59,15 @@ type Config struct {
 
 	StoryLifetime time.Duration
 	ViewRetention time.Duration
+
+	// Bounded execution for Cloud Run Jobs. MaxJobs caps how many media
+	// jobs + cleanup passes RunOnce performs before exiting; MaxDuration
+	// caps total wall time. Zero means unbounded (the long-running
+	// process mode). A bounded run claims a finite batch, exits cleanly,
+	// and is safe to run more than once: every claim is lease-based and
+	// every step idempotent.
+	MaxJobs     int
+	MaxDuration time.Duration
 }
 
 func (c *Config) setDefaults() {
@@ -173,6 +182,71 @@ func (w *Worker) ProcessOneMediaJob(ctx context.Context) (bool, error) {
 // reason as ProcessOneMediaJob.
 func (w *Worker) RunCleanupOnce(ctx context.Context) {
 	w.runCleanupPass(ctx)
+}
+
+// RunOnce performs a bounded batch suitable for a Cloud Run Job: it claims
+// up to MaxJobs media jobs (or runs a single cleanup pass per iteration,
+// alternating), then exits cleanly. With MaxJobs <= 0 it performs exactly
+// one media drain attempt plus one cleanup pass. It respects MaxDuration and
+// ctx cancellation, never starts new work after either, and always finishes
+// an already-claimed job before returning, so concurrent schedules are safe.
+//
+// Returns the number of media jobs actually processed.
+func (w *Worker) RunOnce(ctx context.Context) (int, error) {
+	deadline := time.Time{}
+	if w.cfg.MaxDuration > 0 {
+		deadline = time.Now().Add(w.cfg.MaxDuration)
+	}
+	max := w.cfg.MaxJobs
+	if max <= 0 {
+		max = 1 << 30
+	}
+	processed := 0
+	mediaEnabled := w.cfg.Role == RoleMedia || w.cfg.Role == RoleBoth
+	cleanupEnabled := w.cfg.Role == RoleCleanup || w.cfg.Role == RoleBoth
+
+	for processed < max {
+		if err := ctx.Err(); err != nil {
+			return processed, err
+		}
+		if !deadline.IsZero() && time.Now().After(deadline) {
+			return processed, nil
+		}
+		didWork := false
+		if mediaEnabled {
+			found, err := w.ProcessOneMediaJob(ctx)
+			if err != nil {
+				w.log.Error("bounded media job failed", "error", err)
+			} else if found {
+				processed++
+				didWork = true
+			}
+		}
+		if cleanupEnabled {
+			// One cleanup pass per iteration keeps expiry/GC/purges moving
+			// even when no media jobs are due. It is idempotent, so running
+			// it on overlapping schedules is harmless.
+			w.runCleanupPass(ctx)
+			didWork = true
+			if !mediaEnabled {
+				// Cleanup-only roles exit after one pass unless MaxJobs
+				// explicitly asks for repeated sweeps.
+				if processed >= 1 || max == 1<<30 {
+					return processed, nil
+				}
+			}
+		}
+		if !didWork {
+			return processed, nil
+		}
+		if !mediaEnabled && cleanupEnabled {
+			continue
+		}
+		if !cleanupEnabled && !didWork {
+			return processed, nil
+		}
+	}
+	return processed, nil
 }
 
 // sleep waits for d or until ctx is done, whichever comes first, so a poll

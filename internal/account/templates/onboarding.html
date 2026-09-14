@@ -1,0 +1,38 @@
+{{define "onboarding.html"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+<h1>Welcome, {{.User.Login}}</h1>
+<p>One thing before you start.</p>
+
+<div class="card">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+    <img class="avatar" style="width:40px;height:40px" src="{{.User.AvatarURL}}" alt="">
+    <div>
+      <div><b>{{.User.Login}}</b></div>
+      <div class="muted">This is the account the import will read.</div>
+    </div>
+  </div>
+
+  <form method="get" action="/v1/auth/github/start?purpose=import">
+    <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+      <input type="checkbox" checked disabled style="margin-top:3px">
+      <span>
+        <b>Import people I follow on GitHub</b><br>
+        <span class="muted">
+          You will follow them on Stories too. This never changes who you follow on GitHub, and
+          people who have not signed up are remembered without being contacted. If you unfollow
+          someone here, a later import will not bring them back.
+        </span>
+      </span>
+    </label>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="primary" type="submit">Import and continue</button>
+    </div>
+  </form>
+
+  <form method="post" action="/account/onboarding/skip" style="margin-top:0">
+    <button type="submit">Skip — start with nobody</button>
+  </form>
+</div>
+
+<p class="muted">You can import later from <a href="/account">your account page</a>.</p>
+{{end}}

@@ -104,7 +104,7 @@ func TestEveryDocumentedCommand(t *testing.T) {
 		for _, cmd := range []string{
 			"login", "logout", "setup", "doctor", "post", "reply", "react",
 			"delete", "viewers", "inbox", "report", "follow", "unfollow",
-			"mute", "unmute", "block", "unblock", "settings", "version",
+			"mute", "unmute", "block", "unblock", "settings", "version", "import",
 		} {
 			require.Containsf(t, out, cmd, "help must document %q", cmd)
 		}
@@ -118,6 +118,42 @@ func TestEveryDocumentedCommand(t *testing.T) {
 		require.Contains(t, out, "signed in          yes, as alice")
 		// A diagnostic must never print a secret.
 		require.NotContains(t, out, "clitest-alice")
+	})
+
+	t.Run("import sends you to GitHub rather than pretending", func(t *testing.T) {
+		out := alice.mustRun("import")
+		// The service holds no GitHub token, so the honest answer is a URL.
+		require.Contains(t, out, "/v1/auth/github/start?purpose=import")
+		require.Contains(t, out, "never changes who you follow on GitHub")
+	})
+
+	t.Run("import --no is applied immediately", func(t *testing.T) {
+		bob := newCLI(t, e, "bob-import", 770201)
+		before, err := e.store.UserByGitHubID(context.Background(), nil, 770201)
+		require.NoError(t, err)
+		require.Nil(t, before.OnboardedAt, "a fresh account has not been onboarded")
+
+		out := bob.mustRun("import", "--no")
+		require.Contains(t, out, "Not importing")
+		require.NotContains(t, out, "auth/github/start")
+
+		after, err := e.store.UserByGitHubID(context.Background(), nil, 770201)
+		require.NoError(t, err)
+		require.NotNil(t, after.OnboardedAt, "declining must stop the offer coming back")
+	})
+
+	t.Run("import --json", func(t *testing.T) {
+		carol := newCLI(t, e, "carol-import", 770202)
+		out := carol.mustRun("import", "--json")
+		var got struct {
+			Enabled                  bool   `json:"enabled"`
+			NeedsGitHubAuthorization bool   `json:"needs_github_authorization"`
+			AuthorizationURL         string `json:"authorization_url"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(out), &got))
+		require.True(t, got.Enabled)
+		require.True(t, got.NeedsGitHubAuthorization)
+		require.Contains(t, got.AuthorizationURL, "purpose=import")
 	})
 
 	var storyID string

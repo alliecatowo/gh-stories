@@ -1,0 +1,61 @@
+# GitHub Stories — one-shot migration job (see worker-job.yaml for the
+# recurring worker, infra/deploy/README.md for the full runbook).
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  # One-shot migration job. Created and executed by scripts/deploy.sh on
+  # every deployment, before the API rolls. Never scheduled.
+  name: gh-stories-migrate
+  labels:
+    app: gh-stories
+    role: migrate
+spec:
+  template:
+    spec:
+      taskCount: 1
+      maxRetries: 0
+      timeout: 300s
+      template:
+        spec:
+          serviceAccountName: gh-stories-worker@GHS_GCP_PROJECT.iam.gserviceaccount.com
+          containers:
+            - image: ghcr.io/alliecatowo/gh-stories:TAG
+              name: migrate
+              args: ["migrate"]
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+              env:
+                - name: GHS_ENV
+                  value: production
+                - name: GHS_PUBLIC_URL
+                  value: https://SERVICE_HOST
+                - name: GHS_S3_ENDPOINT
+                  value: https://R2_ACCOUNT_ID.r2.cloudflarestorage.com
+                - name: GHS_S3_REGION
+                  value: auto
+                - name: GHS_S3_BUCKET
+                  value: gh-stories-media
+                - name: GHS_S3_FORCE_PATH_STYLE
+                  value: "false"
+                - name: GHS_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-database-url
+                      key: latest
+                - name: GHS_S3_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-r2-access-key-id
+                      key: latest
+                - name: GHS_S3_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-r2-secret-access-key
+                      key: latest
+                - name: GHS_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-secret-key
+                      key: latest

@@ -6,11 +6,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -29,10 +31,16 @@ func main() {
 	// operator (or a release gate) can identify an image without first
 	// supplying a database and object store.
 	showVersion := flag.Bool("version", false, "print version and exit")
+	once := flag.Bool("once", false, "run a bounded batch (Cloud Run Job) and exit")
+	maxJobs := flag.Int("max-jobs", 0, "max media jobs per bounded run (0 = drain once / single pass)")
+	maxDuration := flag.Duration("max-duration", 0, "max wall time per bounded run (0 = no limit)")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println("gh-stories worker", version.Short(), version.BuildDate)
 		return
+	}
+	if os.Getenv("GHS_WORKER_ONCE") != "" && !*once {
+		*once = strings.EqualFold(os.Getenv("GHS_WORKER_ONCE"), "true")
 	}
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -103,13 +111,33 @@ func main() {
 	}
 
 	st := store.New(pool, nil) // nil clock -> clock.Real{}; production never uses a controllable clock
-	w := worker.New(st, objects, nil, log, worker.Config{
+	cfg2 := worker.Config{
 		Role:          role,
 		StoryLifetime: cfg.StoryLifetime,
 		ViewRetention: cfg.ViewRetention,
 		MediaLimits:   limits,
-	})
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("GHS_WORKER_MAX_JOBS"))); err == nil && n > 0 && *maxJobs == 0 {
+		*maxJobs = n
+	}
+	if d, err := time.ParseDuration(strings.TrimSpace(os.Getenv("GHS_WORKER_MAX_DURATION"))); err == nil && d > 0 && *maxDuration == 0 {
+		*maxDuration = d
+	}
+	cfg2.MaxJobs = *maxJobs
+	cfg2.MaxDuration = *maxDuration
+	w := worker.New(st, objects, nil, log, cfg2)
 
+	if *once {
+		log.Info("worker bounded run starting", "role", role, "env", cfg.Env,
+			"max_jobs", cfg2.MaxJobs, "max_duration", cfg2.MaxDuration.String())
+		n, err := w.RunOnce(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) {
+			log.Error("worker bounded run failed", "error", err)
+			os.Exit(1)
+		}
+		log.Info("worker bounded run finished", "processed", n)
+		return
+	}
 	log.Info("worker starting", "role", role, "env", cfg.Env)
 	if err := w.Run(ctx); err != nil {
 		log.Error("worker exited with error", "error", err)

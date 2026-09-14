@@ -735,7 +735,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read one Story item the caller is authorized to see */
+        /**
+         * Read one Story item
+         * @description Signed-in callers resolve through the full audience predicate; anonymous
+         *     callers may read a live public Story only. Anything else is 404.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -909,7 +913,8 @@ export interface paths {
          * @description A view is recorded by the media authorization gateway when content-bearing
          *     media is delivered to an authorized non-owner. This endpoint records the
          *     client's separate rendering acknowledgement; it never creates a view for
-         *     an unauthorized caller.
+         *     an unauthorized caller. Anonymous callers may acknowledge a live public
+         *     Story; it is a no-op 204 that stores nothing.
          */
         post: {
             parameters: {
@@ -1147,11 +1152,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Authorization gateway for private media
+         * Authorization gateway for media (public Stories readable anonymously)
          * @description Checks session, audience, block, hide, suspension, deletion and expiry on
          *     every request including thumbnails and video range requests. Supports
          *     HTTP range. Delivering content-bearing media to an authorized non-owner
-         *     records a view. There are no public or long-lived media URLs.
+         *     records a view. Anonymous callers may fetch a live public Story's media;
+         *     it is served with short public caching and increments an aggregate
+         *     anonymous counter only — no per-viewer row, no IP history. There are no
+         *     public or long-lived object URLs.
          */
         get: {
             parameters: {
@@ -1995,7 +2003,7 @@ export interface components {
          *     author_follows      — My followers (signed-in users who follow the author)
          *     mutuals             — Mutuals
          *     custom_list         — Custom list
-         *     public              — Public, anyone signed in
+         *     public              — Public, anyone, no sign-in required
          * @enum {string}
          */
         Visibility: "followers_of_author" | "author_follows" | "mutuals" | "custom_list" | "public";
