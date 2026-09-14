@@ -12,6 +12,14 @@ function keyFor(storyId: string, variant: string): string {
   return `${storyId}:${variant}`;
 }
 
+/** Turns the base64 the background sent back into a real, playable Blob. */
+function decodeMedia(base64: string, mime: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
 export class MediaUrlCache {
   private readonly urls = new Map<string, string>();
   private readonly inflight = new Map<string, Promise<string | null>>();
@@ -34,8 +42,7 @@ export class MediaUrlCache {
     const promise = (async () => {
       const result = await callBackground({ type: "ghs:media/fetch", storyId, variant });
       if (!result.ok) return null;
-      const blob = new Blob([result.data.bytes], { type: result.data.mime });
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(decodeMedia(result.data.base64, result.data.mime));
       this.urls.set(key, url);
       return url;
     })();
@@ -89,8 +96,7 @@ export class MediaPathCache {
     if (!storyId || !variant) return;
     const result = await callBackground({ type: "ghs:media/fetch", storyId, variant });
     if (!result.ok) return;
-    const blob = new Blob([result.data.bytes], { type: result.data.mime });
-    this.urls.set(path, URL.createObjectURL(blob));
+    this.urls.set(path, URL.createObjectURL(decodeMedia(result.data.base64, result.data.mime)));
   }
 
   revokeAll(): void {

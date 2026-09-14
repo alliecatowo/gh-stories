@@ -88,7 +88,43 @@ jobs:
         run: mise exec -- pnpm --filter @gh-stories/e2e exec playwright install --with-deps chromium
 
       - name: Visual scenarios (four viewports, real browser)
-        run: mise exec -- pnpm --filter @gh-stories/e2e exec playwright test
+        run: mise exec -- pnpm --filter @gh-stories/e2e exec playwright test --project=site --project=site-mobile --project=site-360 --project=site-wide
+
+      # Extension scenarios need the service running and the extension built
+      # with a localhost origin in its host permissions.
+      - name: Start the service for extension scenarios
+        run: |
+          mise exec -- go build -tags ghs_testidp -o /tmp/ghs-api ./apps/api
+          mise exec -- go build -o /tmp/ghs-worker ./apps/worker
+          /tmp/ghs-api -migrate
+          /tmp/ghs-api > /tmp/ghs-api.log 2>&1 &
+          /tmp/ghs-worker > /tmp/ghs-worker.log 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8787/v1/health/live >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://localhost:8787/v1/health/live >/dev/null
+        env:
+          GHS_ENV: local
+          GHS_PUBLIC_URL: http://localhost:8787
+          GHS_DATABASE_URL: postgres://stories:stories_local_dev@localhost:55432/stories?sslmode=disable
+          GHS_S3_ENDPOINT: http://localhost:55900
+          GHS_S3_BUCKET: stories-media
+          GHS_S3_ACCESS_KEY_ID: storiesminio
+          GHS_S3_SECRET_ACCESS_KEY: storiesminio_local_dev
+          GHS_S3_FORCE_PATH_STYLE: "true"
+          GHS_SECRET_KEY: ci-only-secret-key-long-enough-0123456789abcdef
+          GHS_TEST_IDENTITY_PROVIDER: "true"
+
+      - name: Extension scenarios (MV3 loaded into a real Chromium)
+        run: |
+          mise exec -- go build -o gh-stories ./cli/gh-stories
+          GHS_SERVICE_ORIGIN='http://localhost:8787/*' \
+            mise exec -- pnpm --filter @gh-stories/web-extension exec wxt build -b chrome
+          mise exec -- node tests/e2e/extension.setup.mjs
+          mise exec -- pnpm --filter @gh-stories/e2e exec playwright test --project=extension
+        env:
+          GHS_SERVICE_URL: http://localhost:8787
 
       - name: Upload failure traces
         if: failure()

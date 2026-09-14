@@ -205,7 +205,15 @@ export interface MediaFetchRequest {
 }
 export interface MediaFetchResponseData {
   mime: string;
-  bytes: ArrayBuffer;
+  /**
+   * Base64-encoded media bytes.
+   *
+   * NOT an ArrayBuffer: `runtime.sendMessage` serialises with JSON, not
+   * structured clone, so an ArrayBuffer arrives as `{}` and every Blob built
+   * from it is silently garbage. Base64 costs ~33% on the wire and actually
+   * survives the trip.
+   */
+  base64: string;
 }
 
 export type RuntimeRequest =

@@ -85,6 +85,22 @@ export default defineBackground(() => {
     })();
   });
 
+  /**
+   * Encodes media bytes for transport to a page context.
+   *
+   * Chunked because String.fromCharCode with a huge spread blows the call
+   * stack on anything video-sized.
+   */
+  function toBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    const CHUNK = 0x8000;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(binary);
+  }
+
   // -------------------------------------------------------------- messaging
   async function handleRequest(
     message: RuntimeRequest,
@@ -243,7 +259,7 @@ export default defineBackground(() => {
 
         case "ghs:media/fetch": {
           const result = await apiClient.media(message.storyId, message.variant);
-          return { ok: true, data: result };
+          return { ok: true, data: { mime: result.mime, base64: toBase64(result.bytes) } };
         }
 
         default: {

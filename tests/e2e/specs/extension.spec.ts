@@ -44,6 +44,23 @@ function session(): Session {
   return JSON.parse(readFileSync('/tmp/ghs-e2e-session.json', 'utf8')) as Session;
 }
 
+/** Waits until the batch status lookup has produced an unseen ring. */
+async function waitForUnseenRing(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          let unseen = 0;
+          document.querySelectorAll('ghs-ring-overlay').forEach((h) => {
+            if (h.shadowRoot?.querySelector('[data-state="unseen"]')) unseen++;
+          });
+          return unseen;
+        }),
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(0);
+}
+
 async function shot(page: Page, name: string): Promise<void> {
   const file = `${SHOTS}/${name}.png`;
   mkdirSync(dirname(file), { recursive: true });
@@ -297,6 +314,142 @@ test.describe('browser extension', () => {
       await expect(page.locator('h1')).toBeVisible();
       expect(await page.locator('a.author').getAttribute('href')).toBe('/maya-devs');
       expect(errors, `an API outage must not throw into the page:\n${errors.join('\n')}`).toHaveLength(0);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+test.describe('viewer and dashboard', () => {
+  test('@visual clicking a ring opens the Story, and closing returns to the page', async () => {
+    const { context, extensionId } = await launch();
+    try {
+      await signIn(context, extensionId);
+      const page = await context.newPage();
+      await page.goto('https://github.com/octo-org/upload-worker/pull/482');
+      await waitForUnseenRing(page);
+
+      // The activation control lives in the ring's shadow root, as a sibling
+      // of GitHub's anchor — never nested inside it.
+      const opened = await page.evaluate(async () => {
+        const host = [...document.querySelectorAll('ghs-ring-overlay')]
+          .find((h) => h.shadowRoot?.querySelector('button'));
+        const badge = host?.shadowRoot?.querySelector('button') as HTMLButtonElement | undefined;
+        if (!badge) return false;
+        badge.click();
+        return true;
+      });
+      expect(opened, 'a Story ring must have an activation control').toBe(true);
+
+      // The viewer mounts into its own overlay host on the page.
+      const viewer = page.locator('ghs-overlay-host');
+      await expect(viewer).toBeAttached({ timeout: 15_000 });
+      await expect
+        .poll(async () =>
+          page.evaluate(() => {
+            const h = document.querySelector('ghs-overlay-host');
+            return (h?.shadowRoot?.textContent ?? '').length;
+          }), { timeout: 15_000 })
+        .toBeGreaterThan(0);
+
+      // The Story's media must actually arrive. Media is fetched through the
+      // background (the token never reaches the page) and handed over as a
+      // blob URL, so a missing blob means the viewer is stuck on its error
+      // state rather than showing anything.
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(() => {
+              const h = document.querySelector('ghs-overlay-host');
+              const el = h?.shadowRoot?.querySelector('img[src^="blob:"], video[src^="blob:"]');
+              if (!el) return 'no media element';
+              if (el instanceof HTMLImageElement) {
+                return el.complete && el.naturalWidth > 0 ? 'loaded' : 'image pending';
+              }
+              return el.getAttribute('src')?.startsWith('blob:') ? 'loaded' : 'video pending';
+            }),
+          { timeout: 20_000 },
+        )
+        .toBe('loaded');
+
+      // And the error state must NOT be showing.
+      const viewerText = await page.evaluate(() => {
+        const h = document.querySelector('ghs-overlay-host');
+        return h?.shadowRoot?.textContent ?? '';
+      });
+      expect(viewerText).not.toContain("Couldn't load this Story");
+
+      await shot(page, 'extension-viewer-open');
+
+      // Escape closes it, and GitHub is exactly as it was.
+      await page.keyboard.press('Escape');
+      await expect
+        .poll(async () =>
+          page.evaluate(() => {
+            const h = document.querySelector('ghs-overlay-host');
+            return (h?.shadowRoot?.querySelector('[class*="viewer"]') ?? null) !== null;
+          }), { timeout: 10_000 })
+        .toBe(false);
+
+      await expect(page.locator('h1')).toBeVisible();
+      expect(await page.locator('a.author').getAttribute('href')).toBe('/maya-devs');
+      await shot(page, 'extension-after-close');
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('@visual the dashboard shows a Stories row', async () => {
+    const { context, extensionId } = await launch();
+    try {
+      await signIn(context, extensionId);
+      const page = await context.newPage();
+      await page.goto('https://github.com/');
+
+      // The row is injected near the top of the dashboard feed.
+      // The row mounts as its own Shadow DOM host, inserted before the feed.
+      await expect(page.locator('ghs-stories-row')).toBeAttached({ timeout: 20_000 });
+      await expect
+        .poll(async () =>
+          page.evaluate(() => {
+            const host = document.querySelector('ghs-stories-row');
+            return (host?.shadowRoot?.textContent ?? '').trim().length;
+          }), { timeout: 20_000 })
+        .toBeGreaterThan(0);
+
+      await shot(page, 'extension-dashboard-row');
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('follows GitHub between light and dark colour modes', async () => {
+    const { context, extensionId } = await launch();
+    try {
+      await signIn(context, extensionId);
+      const page = await context.newPage();
+      await page.goto('https://github.com/octo-org/upload-worker/pull/482');
+      await waitForUnseenRing(page);
+
+      const modeOf = () =>
+        page.evaluate(() => {
+          const host = document.querySelector('ghs-ring-overlay') as HTMLElement | null;
+          return host?.dataset.colorMode ?? host?.getAttribute('data-color-mode') ?? null;
+        });
+
+      const dark = await modeOf();
+
+      // GitHub switches its own colour mode on <html>; the extension must
+      // follow it rather than guessing from prefers-color-scheme.
+      await page.evaluate(() => {
+        document.documentElement.setAttribute('data-color-mode', 'light');
+      });
+      await page.waitForTimeout(1500);
+      const light = await modeOf();
+
+      expect([dark, light].some((v) => v !== null),
+        'the ring host should carry a colour mode it can follow').toBe(true);
+      if (dark !== null && light !== null) expect(light).not.toBe(dark);
     } finally {
       await context.close();
     }
