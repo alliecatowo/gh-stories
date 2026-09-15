@@ -58,6 +58,16 @@ func runProbe(ctx context.Context, in, out *os.File, inTmux bool) ([]byte, error
 	defer in.SetReadDeadline(time.Time{})
 
 	start := time.Now()
+
+	// The entire read strategy below depends on read deadlines. If this fd
+	// does not support them, no bounded read is possible at all — probing
+	// must be skipped outright. A probe that blocks forever on Read is
+	// indistinguishable from a frozen CLI and also swallows Ctrl-C, since
+	// nothing in that state selects on ctx.
+	if err := in.SetReadDeadline(time.Now().Add(time.Millisecond)); err != nil {
+		return nil, fmt.Errorf("terminal input does not support read deadlines: %w", err)
+	}
+
 	payload := probePayload
 	if inTmux {
 		payload = tmuxPassthrough(payload)
@@ -76,8 +86,8 @@ func runProbe(ctx context.Context, in, out *os.File, inTmux bool) ([]byte, error
 	fenceAt := time.Time{}
 	for time.Now().Before(deadline) {
 		if err := in.SetReadDeadline(deadline); err != nil {
-			// This fd does not support read deadlines (unusual for a real
-			// TTY). Stop rather than risk a Read that could block forever.
+			// Deadline support was verified above, so this should not
+			// happen; stop rather than risk a Read that blocks forever.
 			break
 		}
 		n, err := in.Read(chunk)
@@ -114,8 +124,14 @@ func runProbe(ctx context.Context, in, out *os.File, inTmux bool) ([]byte, error
 // slow terminal can answer DA seconds later). Without this, those bytes sit
 // in the TTY input queue and the shell reprints them as garbage — and can
 // even execute fragments of them — the moment this process exits.
+//
+// The caller verified deadline support before probing, so the bounded drain
+// below always terminates; a failed deadline reset skips draining rather
+// than risking an unbounded Read that would hang the CLI and swallow Ctrl-C.
 func drainLateReplies(in *os.File) {
-	_ = in.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	if err := in.SetReadDeadline(time.Now().Add(50 * time.Millisecond)); err != nil {
+		return
+	}
 	var chunk [256]byte
 	for {
 		n, err := in.Read(chunk[:])
