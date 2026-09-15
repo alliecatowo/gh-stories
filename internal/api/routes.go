@@ -43,9 +43,12 @@ func (s *Server) routes() http.Handler {
 			r.Get("/auth/github/start", h(s.getAuthStart))
 			r.Get("/auth/github/callback", h(s.getAuthCallback))
 			r.Post("/auth/cli/pending", h(s.postPendingLogin))
+			r.Post("/auth/device/start", h(s.postDeviceLoginStart))
 		})
 		r.With(s.limit(ratelimit.RuleLoginPoll, "login-poll")).
 			Post("/auth/cli/poll", h(s.postPollLogin))
+		r.With(s.limit(ratelimit.RuleLoginPoll, "login-poll")).
+			Post("/auth/device/poll", h(s.postDeviceLoginPoll))
 
 		// Compiled in only under the `ghs_testidp` build tag, and refused at
 		// runtime outside local/test. A no-op in every release build.

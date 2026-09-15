@@ -313,6 +313,12 @@ func (i *identityStub) DenyPendingLogin(context.Context, uuid.UUID) error { retu
 func (i *identityStub) Poll(context.Context, uuid.UUID, string) (*store.PollResult, error) {
 	return nil, context.Canceled
 }
+func (i *identityStub) StartDeviceLogin(context.Context, domain.ClientKind, string) (*api.DeviceLoginStart, error) {
+	return nil, context.Canceled
+}
+func (i *identityStub) PollDeviceLogin(context.Context, uuid.UUID) (*store.PollResult, error) {
+	return nil, context.Canceled
+}
 func (i *identityStub) ImportFollows(context.Context, uuid.UUID, string, bool, bool) (*api.ImportSummary, error) {
 	return &api.ImportSummary{}, nil
 }

@@ -204,6 +204,78 @@ func (s *Server) postPollLogin(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// postDeviceLoginStart begins a GitHub Device Authorization Grant login.
+//
+// The CLI receives a device login id, a short user code and GitHub's
+// verification URI. The device code itself stays server side: the client
+// never needs it, because the server polls GitHub on the client's behalf.
+func (s *Server) postDeviceLoginStart(w http.ResponseWriter, r *http.Request) error {
+	if s.Auth == nil || !s.Auth.Configured() {
+		return httpx.NotFound()
+	}
+	var req struct {
+		ClientKind  string `json:"client_kind"`
+		ClientLabel string `json:"client_label"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req, 4<<10); err != nil {
+		return err
+	}
+	kind := domain.ClientKind(req.ClientKind)
+	if kind != domain.ClientCLI && kind != domain.ClientBrowserExtension {
+		return httpx.FieldError("client_kind", "Unknown client.")
+	}
+	label := req.ClientLabel
+	if len([]rune(label)) > 120 {
+		label = string([]rune(label)[:120])
+	}
+	res, err := s.Auth.StartDeviceLogin(r.Context(), kind, label)
+	if err != nil {
+		return httpx.Internal(err)
+	}
+	httpx.WriteJSON(w, http.StatusCreated, map[string]any{
+		"device_login_id":  res.ID.String(),
+		"user_code":        res.UserCode,
+		"verification_uri": res.VerificationURI,
+		"expires_at":       res.ExpiresAt,
+		"interval_seconds": res.IntervalSeconds,
+	})
+	return nil
+}
+
+// postDeviceLoginPoll polls a device authorization started by
+// postDeviceLoginStart. It is anonymous, rate limited, expiring and single
+// use, exactly like the pending-login poll above it.
+func (s *Server) postDeviceLoginPoll(w http.ResponseWriter, r *http.Request) error {
+	if s.Auth == nil {
+		return httpx.NotFound()
+	}
+	var req struct {
+		DeviceLoginID string `json:"device_login_id"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req, 4<<10); err != nil {
+		return err
+	}
+	id, err := uuid.Parse(req.DeviceLoginID)
+	if err != nil {
+		return httpx.NotFound()
+	}
+	res, err := s.Auth.PollDeviceLogin(r.Context(), id)
+	if err != nil {
+		return httpx.NotFound()
+	}
+	out := map[string]any{"status": res.Status}
+	if res.Status == "approved" && res.Token != "" {
+		out["token"] = res.Token
+		if res.UserID != nil {
+			if u, err := s.Store.UserByID(r.Context(), nil, *res.UserID); err == nil {
+				out["user"] = presentUser(u)
+			}
+		}
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+	return nil
+}
+
 func (s *Server) postLogout(w http.ResponseWriter, r *http.Request) error {
 	u, err := mustCaller(r)
 	if err != nil {

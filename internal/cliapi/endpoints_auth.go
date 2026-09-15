@@ -45,6 +45,36 @@ func (c *Client) PollPendingLogin(ctx context.Context, pendingLoginID, pollingSe
 	return &out, nil
 }
 
+// StartDeviceLogin begins a GitHub Device Authorization Grant login (POST
+// /auth/device/start). clientLabel is a human label, e.g. "gh stories on
+// allies-mbp". The device code stays server side; the response carries only
+// the user code and GitHub's verification URI.
+func (c *Client) StartDeviceLogin(ctx context.Context, clientKind, clientLabel string) (*DeviceLogin, error) {
+	req := struct {
+		ClientKind  string `json:"client_kind"`
+		ClientLabel string `json:"client_label,omitempty"`
+	}{ClientKind: clientKind, ClientLabel: clientLabel}
+	var out DeviceLogin
+	if err := c.postJSON(ctx, "/auth/device/start", nil, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// PollDeviceLogin polls a device authorization created by StartDeviceLogin
+// (POST /auth/device/poll). The token is present exactly once, on the
+// first successful poll after the user authorizes on GitHub.
+func (c *Client) PollDeviceLogin(ctx context.Context, id string) (*DeviceLoginPoll, error) {
+	req := struct {
+		DeviceLoginID string `json:"device_login_id"`
+	}{DeviceLoginID: id}
+	var out DeviceLoginPoll
+	if err := c.postJSON(ctx, "/auth/device/poll", nil, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Logout revokes the calling session (POST /auth/logout).
 func (c *Client) Logout(ctx context.Context) error {
 	return c.do(ctx, requestSpec{method: http.MethodPost, path: "/auth/logout"}, nil)

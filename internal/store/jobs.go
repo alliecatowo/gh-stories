@@ -149,9 +149,13 @@ func (s *Store) PurgeExpiredAuth(ctx context.Context) error {
 		`DELETE FROM oauth_flows WHERE expires_at < $1 - make_interval(secs => 3600)`, now); err != nil {
 		return wrap("purge oauth flows", err)
 	}
+	if _, err := s.pool.Exec(ctx,
+		`DELETE FROM pending_logins WHERE expires_at < $1 - make_interval(secs => 3600)`, now); err != nil {
+		return wrap("purge pending logins", err)
+	}
 	_, err := s.pool.Exec(ctx,
-		`DELETE FROM pending_logins WHERE expires_at < $1 - make_interval(secs => 3600)`, now)
-	return wrap("purge pending logins", err)
+		`DELETE FROM device_logins WHERE expires_at < $1 - make_interval(secs => 3600)`, now)
+	return wrap("purge device logins", err)
 }
 
 // OpsSnapshot is the operational visibility the health endpoint reports.

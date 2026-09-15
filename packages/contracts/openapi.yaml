@@ -114,6 +114,47 @@ paths:
         "404": {$ref: "#/components/responses/Error"}
         "429": {$ref: "#/components/responses/Error"}
 
+  /auth/device/start:
+    post:
+      tags: [auth]
+      summary: Start a GitHub Device Authorization Grant login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_kind]
+              properties:
+                client_kind: {type: string, enum: [cli, browser_extension]}
+                client_label: {type: string, maxLength: 120, description: "Human label shown in the session list, e.g. 'gh stories on allies-mbp'"}
+      responses:
+        "201":
+          description: Device authorization created
+          content: {application/json: {schema: {$ref: "#/components/schemas/DeviceLogin"}}}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/device/poll:
+    post:
+      tags: [auth]
+      summary: Poll a device authorization (bounded, rate limited, single use)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_login_id]
+              properties:
+                device_login_id: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Current authorization state; token present exactly once on approval
+          content: {application/json: {schema: {$ref: "#/components/schemas/DeviceLoginPoll"}}}
+        "404": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+
   /auth/logout:
     post:
       tags: [auth]
@@ -697,6 +738,24 @@ components:
         status: {type: string, enum: [pending, approved, denied, expired]}
         token: {type: string, description: Present exactly once, on the first successful poll after approval}
         expires_at: {type: string, format: date-time}
+        user: {$ref: "#/components/schemas/PublicUser"}
+
+    DeviceLogin:
+      type: object
+      required: [device_login_id, user_code, verification_uri, expires_at, interval_seconds]
+      properties:
+        device_login_id: {type: string, format: uuid}
+        user_code: {type: string, description: Short code the user matches on github.com}
+        verification_uri: {type: string, description: GitHub URL the user opens to authorize}
+        expires_at: {type: string, format: date-time}
+        interval_seconds: {type: integer}
+
+    DeviceLoginPoll:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [pending, slow_down, approved, denied, expired]}
+        token: {type: string, description: Present exactly once, on the first successful poll after approval}
         user: {$ref: "#/components/schemas/PublicUser"}
 
     ImportSummary:

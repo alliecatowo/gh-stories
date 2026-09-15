@@ -186,7 +186,7 @@ USAGE
   gh stories                       open the Stories viewer
   gh stories @alice                open one person's Stories
 
-  gh stories login [--no-browser]  sign in (works over SSH)
+  gh stories login [--no-browser] [--device]  sign in (works over SSH)
   gh stories logout                sign out and revoke this session
   gh stories setup                 offer the singular "gh story" alias
   gh stories doctor                check the service, auth and terminal

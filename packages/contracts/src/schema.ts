@@ -254,6 +254,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/device/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a GitHub Device Authorization Grant login */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        client_kind: "cli" | "browser_extension";
+                        /** @description Human label shown in the session list, e.g. 'gh stories on allies-mbp' */
+                        client_label?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Device authorization created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DeviceLogin"];
+                    };
+                };
+                429: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/device/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Poll a device authorization (bounded, rate limited, single use) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        device_login_id: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Current authorization state; token present exactly once on approval */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DeviceLoginPoll"];
+                    };
+                };
+                404: components["responses"]["Error"];
+                429: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/logout": {
         parameters: {
             query?: never;
@@ -2063,6 +2154,24 @@ export interface components {
             token?: string;
             /** Format: date-time */
             expires_at?: string;
+            user?: components["schemas"]["PublicUser"];
+        };
+        DeviceLogin: {
+            /** Format: uuid */
+            device_login_id: string;
+            /** @description Short code the user matches on github.com */
+            user_code: string;
+            /** @description GitHub URL the user opens to authorize */
+            verification_uri: string;
+            /** Format: date-time */
+            expires_at: string;
+            interval_seconds: number;
+        };
+        DeviceLoginPoll: {
+            /** @enum {string} */
+            status: "pending" | "slow_down" | "approved" | "denied" | "expired";
+            /** @description Present exactly once */
+            token?: string;
             user?: components["schemas"]["PublicUser"];
         };
         ImportSummary: {

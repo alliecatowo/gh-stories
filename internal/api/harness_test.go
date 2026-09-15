@@ -132,6 +132,12 @@ func (f *fakeAuth) DenyPendingLogin(context.Context, uuid.UUID) error { return n
 func (f *fakeAuth) Poll(context.Context, uuid.UUID, string) (*store.PollResult, error) {
 	return nil, context.Canceled
 }
+func (f *fakeAuth) StartDeviceLogin(context.Context, domain.ClientKind, string) (*DeviceLoginStart, error) {
+	return nil, context.Canceled
+}
+func (f *fakeAuth) PollDeviceLogin(context.Context, uuid.UUID) (*store.PollResult, error) {
+	return nil, context.Canceled
+}
 func (f *fakeAuth) ImportFollows(context.Context, uuid.UUID, string, bool, bool) (*ImportSummary, error) {
 	return &ImportSummary{}, nil
 }

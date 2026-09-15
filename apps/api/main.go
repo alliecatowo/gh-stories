@@ -245,6 +245,21 @@ func (a *authAdapter) Poll(ctx context.Context, pendingID uuid.UUID, secret stri
 	return a.svc.Poll(ctx, pendingID, secret)
 }
 
+func (a *authAdapter) StartDeviceLogin(ctx context.Context, kind domain.ClientKind, label string) (*api.DeviceLoginStart, error) {
+	res, err := a.svc.StartDeviceLogin(ctx, kind, label)
+	if err != nil {
+		return nil, err
+	}
+	return &api.DeviceLoginStart{
+		ID: res.ID, UserCode: res.UserCode, VerificationURI: res.VerificationURI,
+		ExpiresAt: res.ExpiresAt, IntervalSeconds: res.IntervalSeconds,
+	}, nil
+}
+
+func (a *authAdapter) PollDeviceLogin(ctx context.Context, id uuid.UUID) (*store.PollResult, error) {
+	return a.svc.PollDeviceLogin(ctx, id)
+}
+
 func (a *authAdapter) ImportFollows(ctx context.Context, userID uuid.UUID,
 	upstreamToken string, enabled, preview bool) (*api.ImportSummary, error) {
 	sum, err := a.svc.ImportFollows(ctx, userID, upstreamToken, enabled, preview)
