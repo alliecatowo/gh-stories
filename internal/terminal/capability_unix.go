@@ -5,6 +5,7 @@ package terminal
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -56,6 +57,7 @@ func runProbe(ctx context.Context, in, out *os.File, inTmux bool) ([]byte, error
 	defer term.Restore(int(in.Fd()), oldState)
 	defer in.SetReadDeadline(time.Time{})
 
+	start := time.Now()
 	payload := probePayload
 	if inTmux {
 		payload = tmuxPassthrough(payload)
@@ -71,6 +73,7 @@ func runProbe(ctx context.Context, in, out *os.File, inTmux bool) ([]byte, error
 
 	var buf bytes.Buffer
 	chunk := make([]byte, 256)
+	fenceAt := time.Time{}
 	for time.Now().Before(deadline) {
 		if err := in.SetReadDeadline(deadline); err != nil {
 			// This fd does not support read deadlines (unusual for a real
@@ -87,6 +90,7 @@ func runProbe(ctx context.Context, in, out *os.File, inTmux bool) ([]byte, error
 				// still sitting in the kernel's TTY input queue are left
 				// there — never handed back to the caller as if they were
 				// real keystrokes.
+				fenceAt = time.Now()
 				break
 			}
 		}
@@ -94,5 +98,29 @@ func runProbe(ctx context.Context, in, out *os.File, inTmux bool) ([]byte, error
 			break
 		}
 	}
+	if os.Getenv("GHS_DEBUG_PROBE") != "" {
+		elapsed := time.Since(start)
+		if !fenceAt.IsZero() {
+			elapsed = fenceAt.Sub(start)
+		}
+		fmt.Fprintf(os.Stderr, "ghs probe: fence after %v, %d byte(s)\n",
+			elapsed.Round(time.Millisecond), buf.Len())
+	}
+	drainLateReplies(in)
 	return buf.Bytes(), nil
+}
+
+// drainLateReplies discards probe replies that arrive after the budget (a
+// slow terminal can answer DA seconds later). Without this, those bytes sit
+// in the TTY input queue and the shell reprints them as garbage — and can
+// even execute fragments of them — the moment this process exits.
+func drainLateReplies(in *os.File) {
+	_ = in.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	var chunk [256]byte
+	for {
+		n, err := in.Read(chunk[:])
+		if n <= 0 || err != nil {
+			break
+		}
+	}
 }

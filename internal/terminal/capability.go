@@ -127,6 +127,14 @@ func Detect(ctx context.Context, in *os.File, out *os.File, override Protocol) (
 		return caps, nil
 	}
 
+	// A cached graphics verdict from this exact environment skips the probe
+	// entirely: repeat runs answer instantly instead of re-paying up to the
+	// full probe budget. Cols/rows above already came from a fresh ioctl.
+	if hit := loadCapCache(); hit != nil {
+		hit.ColsCells, hit.RowsCells = caps.ColsCells, caps.RowsCells
+		return *hit, nil
+	}
+
 	buf, err := runProbe(ctx, in, out, caps.InTmux)
 	if err != nil {
 		// A probe failure (raw mode unavailable, write error, ...) is not
@@ -143,6 +151,7 @@ func Detect(ctx context.Context, in *os.File, out *os.File, override Protocol) (
 	}
 	resolveCellGeometry(&caps, pr)
 	decideProtocol(&caps, pr)
+	storeCapCache(&caps, pr)
 	return caps, nil
 }
 
