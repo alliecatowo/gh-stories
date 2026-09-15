@@ -3,6 +3,7 @@ package terminal
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -137,9 +138,26 @@ func Detect(ctx context.Context, in *os.File, out *os.File, override Protocol) (
 	}
 
 	pr := parseProbe(buf)
+	if os.Getenv("GHS_DEBUG_PROBE") != "" {
+		debugProbe(buf, pr)
+	}
 	resolveCellGeometry(&caps, pr)
 	decideProtocol(&caps, pr)
 	return caps, nil
+}
+
+// debugProbe dumps the raw probe reply for terminal-compatibility debugging.
+// Set GHS_DEBUG_PROBE=1 and run `gh stories doctor`: the hex dump shows
+// exactly what the terminal sent back (or that nothing arrived at all),
+// which is the ground truth for "couldn't detect in time" reports.
+func debugProbe(buf []byte, pr probeResult) {
+	fmt.Fprintf(os.Stderr, "ghs probe: %d byte(s) in %q (tmux=%v screen=%v ssh=%v)\n",
+		len(buf), os.Getenv("TERM_PROGRAM"),
+		os.Getenv("TMUX") != "", os.Getenv("STY") != "",
+		os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "")
+	fmt.Fprintf(os.Stderr, "ghs probe: raw=%q\n", buf)
+	fmt.Fprintf(os.Stderr, "ghs probe: parsed kittyOK=%v daSeen=%v cell=%dx%d win=%dx%d\n",
+		pr.kittyOK, pr.daSeen, pr.cellW, pr.cellH, pr.winW, pr.winH)
 }
 
 func populateEnvHints(caps *Capabilities) {

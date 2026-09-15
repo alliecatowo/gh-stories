@@ -13,9 +13,10 @@ import (
 
 // probeBudget bounds how long Detect will wait for a terminal to answer the
 // capability probe. This runs on every `gh stories` invocation against a
-// real TTY, so it must stay well under a second: a slow or non-responding
-// terminal must never make the CLI feel hung.
-const probeBudget = 250 * time.Millisecond
+// real TTY: a slow or non-responding terminal must never make the CLI feel
+// hung, but cutting Ghostty off mid-reply would be worse than the wait —
+// half a second worst-case, only on runs where nothing answers at all.
+const probeBudget = 500 * time.Millisecond
 
 // probePayload is the escape sequence Detect writes to discover terminal
 // capabilities in one round trip:
