@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -29,6 +30,7 @@ func cmdPost(ctx context.Context, args []string) error {
 	noReplies := fs.Bool("no-replies", false, "turn replies off for this Story")
 	noReactions := fs.Bool("no-reactions", false, "turn reactions off for this Story")
 	wait := fs.Bool("wait", true, "wait for processing to finish")
+	waitTimeout := fs.Duration("wait-timeout", 10*time.Minute, "give up waiting for processing after this long")
 	rest, err := parseArgs(fs, args)
 	if err != nil {
 		return usagef("gh stories post <file|-> [--caption …] [--audience …]")
@@ -111,6 +113,7 @@ func cmdPost(ctx context.Context, args []string) error {
 	item, err := sess.Client.Upload(ctx, cliapi.UploadRequest{
 		Meta: meta, Reader: body, Size: size, ChecksumSHA256: sum,
 		IdempotencyKey: key,
+		MaxWait:        *waitTimeout,
 		Progress: func(sent, total int64) {
 			if *asJSON || !stderrIsTTY() || total <= 0 {
 				return

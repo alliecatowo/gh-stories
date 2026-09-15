@@ -47,17 +47,23 @@ func cmdView(ctx context.Context, args []string) error {
 	}
 
 	var groups []cliapi.AuthorGroup
+	dbg := debugLog()
+	dbg("open session")
 	if who != "" {
+		dbg("fetch author sequence")
 		group, err := sess.Client.UserStories(ctx, who)
 		if err != nil {
 			return err
 		}
+		dbg("author sequence ok")
 		groups = []cliapi.AuthorGroup{*group}
 	} else {
+		dbg("fetch feed")
 		feed, err := sess.Client.Feed(ctx, "", 25, false)
 		if err != nil {
 			return err
 		}
+		dbg("feed ok")
 		if feed.Me != nil && len(feed.Me.Items) > 0 {
 			groups = append(groups, *feed.Me)
 		}
@@ -75,6 +81,7 @@ func cmdView(ctx context.Context, args []string) error {
 	}
 
 	caps := detectTerminal(ctx, terminal.Protocol(*renderer))
+	dbg("terminal probe done")
 	model := tui.New(tui.Options{
 		Groups:   groups,
 		Video:    tui.VideoMode(*video),
@@ -87,6 +94,20 @@ func cmdView(ctx context.Context, args []string) error {
 		OpenURL: openBrowser,
 	})
 	return tui.Run(ctx, model)
+}
+
+// debugLog returns a timestamped stderr tracer enabled by GHS_DEBUG=1.
+// A hung CLI run with GHS_DEBUG=1 shows exactly which stage never
+// finished, so nobody has to capture a goroutine dump to report a freeze.
+func debugLog() func(string, ...any) {
+	if os.Getenv("GHS_DEBUG") == "" {
+		return func(string, ...any) {}
+	}
+	start := time.Now()
+	return func(format string, a ...any) {
+		fmt.Fprintf(os.Stderr, "ghs-debug[+%v] %s\n",
+			time.Since(start).Round(time.Millisecond), fmt.Sprintf(format, a...))
+	}
 }
 
 // printFeed is the noninteractive path.
