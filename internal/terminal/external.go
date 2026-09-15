@@ -38,11 +38,31 @@ func (e *External) Name() Protocol { return ProtocolExternal }
 // Supported always returns true: External is the universal fallback.
 func (e *External) Supported(caps Capabilities) bool { return true }
 
-// Render draws a placeholder box derived from img's bounds. Callers with
-// richer metadata (byte size, an accessibility description, a URL) should
-// call RenderPlaceholder directly instead, since Render has no way to
-// receive that information through the shared Renderer interface.
+// Render draws img as half-block color art when the terminal can do color,
+// falling back to the placeholder box otherwise.
+//
+// The art path is what makes Stories viewable in tmux without passthrough,
+// over plain SSH clients, and in any color terminal whose graphics probe
+// came back negative: a picture the terminal cannot draw natively is still
+// a picture worth seeing. Video arrives here as its poster frame, so it
+// renders as a still — the pane (not this renderer) keeps labelling the
+// item as video, and the product never claims motion it did not deliver.
+//
+// Callers with richer metadata (byte size, an accessibility description, a
+// URL) should call RenderPlaceholder directly instead, since Render has no
+// way to receive that information through the shared Renderer interface.
 func (e *External) Render(w io.Writer, id uint32, img image.Image, p Placement, caps Capabilities) error {
+	if img != nil && artOK(caps) {
+		cols := p.WidthCells
+		if cols < 2 {
+			cols = 2
+		}
+		if err := RenderHalfBlock(w, img, cols, caps.TruecolorOK); err == nil {
+			return nil
+		}
+		// Art failed; fall through to the placeholder rather than drawing
+		// nothing at all.
+	}
 	meta := PlaceholderMeta{Kind: "image"}
 	if img != nil {
 		b := img.Bounds()

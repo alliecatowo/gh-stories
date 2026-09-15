@@ -219,6 +219,18 @@ func decideProtocol(caps *Capabilities, pr probeResult) {
 		caps.Reason = "kitty graphics protocol query succeeded"
 		return
 	}
+	if os.Getenv("TERM_PROGRAM") == "ghostty" {
+		// Ghostty documents native kitty-graphics support, and the DA fence
+		// above proves this exact channel round-trips escape queries — so a
+		// missing kitty OK here means Ghostty ignored that one query, not
+		// that graphics are unavailable. An unrecognized kitty escape is
+		// ignored by terminals, not rendered as garbage, so trusting the
+		// vendor here fails safe. (Ghostty is deliberately NOT an iTerm2-
+		// protocol signal: it does not implement OSC 1337.)
+		caps.Protocol = ProtocolKitty
+		caps.Reason = "Ghostty implements the kitty graphics protocol; probe channel verified live via device-attributes fence"
+		return
+	}
 	if isITermLikeEnv() {
 		caps.Protocol = ProtocolITerm2
 		caps.Reason = "kitty graphics unsupported; falling back to iTerm2 inline images based on TERM_PROGRAM/LC_TERMINAL"
