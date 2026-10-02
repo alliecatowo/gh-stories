@@ -219,3 +219,43 @@ func TestMediaLoopIsIdleWithNoQueuedJobs(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, found)
 }
+
+// RunOnce is the scale-to-zero entry point: on an empty queue it must do one
+// cleanup pass and return promptly (the regression was a no-sleep busy loop
+// that only ended at MaxDuration).
+func TestRunOnceExitsImmediatelyWhenIdle(t *testing.T) {
+	s, _ := testdb.New(t)
+	objects := realMinIO(t)
+	limits := media.DefaultLimits()
+	w := worker.New(s, objects, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), worker.Config{
+		Role:          worker.RoleBoth,
+		WorkerID:      "test-once",
+		StoryLifetime: 24 * time.Hour,
+		ViewRetention: 7 * 24 * time.Hour,
+		MediaLimits:   limits,
+		MaxJobs:       20,
+		MaxDuration:   time.Minute,
+	})
+
+	start := time.Now()
+	n, err := w.RunOnce(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, n)
+	require.Less(t, time.Since(start), 10*time.Second, "idle RunOnce must not wait out MaxDuration")
+}
+
+func TestRunOnceDrainsQueuedJobThenExits(t *testing.T) {
+	s, _ := testdb.New(t)
+	objects := realMinIO(t)
+	author := testdb.Account(t, s, authorGitHubID, "once-author")
+	uploadAndFinalize(t, s, objects, author, fixture(t, "landscape.png"), "image/png", "landscape.png")
+
+	w := newWorker(t, s, objects)
+	n, err := w.RunOnce(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	n, err = w.RunOnce(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, n)
+}

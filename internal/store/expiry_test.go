@@ -329,3 +329,11 @@ func TestFeedDoesNotRecordViews(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, views, "repeated delivery to the same viewer is one view")
 }
+
+// PurgeExpiredAuth must not depend on parameter-type inference: with a bare
+// `$1 - <interval expr>` Postgres can infer $1 as interval and fail with
+// "operator does not exist: timestamp with time zone < interval".
+func TestPurgeExpiredAuthRuns(t *testing.T) {
+	s, _ := testdb.New(t)
+	require.NoError(t, s.PurgeExpiredAuth(context.Background()))
+}

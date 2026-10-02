@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -29,6 +30,9 @@ func main() {
 	// operator (or a release gate) can identify an image without first
 	// supplying a database and object store.
 	showVersion := flag.Bool("version", false, "print version and exit")
+	once := flag.Bool("once", false, "run one cleanup pass, drain the media queue, then exit (Cloud Run Job / cron)")
+	maxJobs := flag.Int("max-jobs", 0, "with -once: max media jobs per run (0 = until the queue is empty)")
+	maxDuration := flag.Duration("max-duration", 0, "with -once: stop claiming new work after this long (0 = no cap)")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println("gh-stories worker", version.Short(), version.BuildDate)
@@ -103,12 +107,29 @@ func main() {
 	}
 
 	st := store.New(pool, nil) // nil clock -> clock.Real{}; production never uses a controllable clock
+	if strings.EqualFold(os.Getenv("GHS_WORKER_ONCE"), "true") {
+		*once = true
+	}
 	w := worker.New(st, objects, nil, log, worker.Config{
 		Role:          role,
 		StoryLifetime: cfg.StoryLifetime,
 		ViewRetention: cfg.ViewRetention,
 		MediaLimits:   limits,
+		MaxJobs:       *maxJobs,
+		MaxDuration:   *maxDuration,
 	})
+
+	if *once {
+		log.Info("worker run-once starting", "role", role, "env", cfg.Env,
+			"max_jobs", *maxJobs, "max_duration", maxDuration.String())
+		n, err := w.RunOnce(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) {
+			log.Error("worker run-once failed", "error", err, "processed", n)
+			os.Exit(1)
+		}
+		log.Info("worker run-once finished", "processed", n)
+		return
+	}
 
 	log.Info("worker starting", "role", role, "env", cfg.Env)
 	if err := w.Run(ctx); err != nil {

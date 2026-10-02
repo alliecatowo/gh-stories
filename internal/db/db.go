@@ -19,10 +19,17 @@ func Open(ctx context.Context, dsn string) (*Pool, error) {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = 16
-	cfg.MinConns = 2
+	// No warm connections: scale-to-zero hosts and Neon's autosuspend both
+	// want an idle process to hold nothing open.
+	cfg.MinConns = 0
 	cfg.MaxConnLifetime = time.Hour
 	cfg.MaxConnIdleTime = 15 * time.Minute
 	cfg.HealthCheckPeriod = 30 * time.Second
+	// Unnamed statements, no client-side statement cache: works through
+	// PgBouncer transaction pooling (Neon's -pooler endpoint), where cached
+	// named prepared statements fail with "prepared statement ... already
+	// exists" (SQLSTATE 08P01).
+	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
 	cfg.ConnConfig.RuntimeParams["application_name"] = "gh-stories"
 	// All timestamps are authoritative server time in UTC.
 	cfg.ConnConfig.RuntimeParams["timezone"] = "UTC"
