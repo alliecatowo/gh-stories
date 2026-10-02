@@ -25,11 +25,13 @@ func Open(ctx context.Context, dsn string) (*Pool, error) {
 	cfg.MaxConnLifetime = time.Hour
 	cfg.MaxConnIdleTime = 15 * time.Minute
 	cfg.HealthCheckPeriod = 30 * time.Second
-	// Unnamed statements, no client-side statement cache: works through
+	// Describe + execute with an unnamed statement and no client-side cache (the
+	// server still infers parameter types, so `$1::jsonb` with []byte works,
+	// unlike QueryExecModeExec): works through
 	// PgBouncer transaction pooling (Neon's -pooler endpoint), where cached
 	// named prepared statements fail with "prepared statement ... already
 	// exists" (SQLSTATE 08P01).
-	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
+	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeDescribeExec
 	cfg.ConnConfig.RuntimeParams["application_name"] = "gh-stories"
 	// All timestamps are authoritative server time in UTC.
 	cfg.ConnConfig.RuntimeParams["timezone"] = "UTC"
