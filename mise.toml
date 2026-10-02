@@ -103,3 +103,7 @@ run = "bash scripts/verify.sh"
 [tasks.release]
 description = "Validate the intended version and execute the authorized release process"
 run = "bash scripts/release.sh"
+
+[tasks.deploy]
+description = "Deploy a tagged release image to production Cloud Run (migrate once, deploy API, verify)"
+run = "bash scripts/deploy.sh"

@@ -59,6 +59,13 @@ type Config struct {
 
 	StoryLifetime time.Duration
 	ViewRetention time.Duration
+
+	// Bounded execution for run-to-completion hosts (Cloud Run Jobs, cron
+	// containers). MaxJobs caps media jobs per RunOnce (<= 0 means drain
+	// until the queue is empty); MaxDuration caps wall time (0 = no cap).
+	// Both are ignored by Run.
+	MaxJobs     int
+	MaxDuration time.Duration
 }
 
 func (c *Config) setDefaults() {
@@ -173,6 +180,45 @@ func (w *Worker) ProcessOneMediaJob(ctx context.Context) (bool, error) {
 // reason as ProcessOneMediaJob.
 func (w *Worker) RunCleanupOnce(ctx context.Context) {
 	w.runCleanupPass(ctx)
+}
+
+// RunOnce is the run-to-completion mode for scale-to-zero hosts: it does ONE
+// cleanup pass (when the role includes cleanup), then claims media jobs
+// until the queue is empty, MaxJobs is reached, MaxDuration elapses or ctx is
+// cancelled, and returns. An idle run therefore costs one cleanup pass and
+// exits immediately. Idempotent and lease-based, so overlapping schedules are
+// safe. It never starts new work after the deadline and always finishes a
+// claimed job. Returns the number of media jobs processed; a claim error is
+// returned so the host records a failed execution.
+func (w *Worker) RunOnce(ctx context.Context) (int, error) {
+	var deadline time.Time
+	if w.cfg.MaxDuration > 0 {
+		deadline = time.Now().Add(w.cfg.MaxDuration)
+	}
+	if w.cfg.Role == RoleCleanup || w.cfg.Role == RoleBoth {
+		w.runCleanupPass(ctx)
+	}
+	if w.cfg.Role != RoleMedia && w.cfg.Role != RoleBoth {
+		return 0, ctx.Err()
+	}
+	processed := 0
+	for w.cfg.MaxJobs <= 0 || processed < w.cfg.MaxJobs {
+		if err := ctx.Err(); err != nil {
+			return processed, err
+		}
+		if !deadline.IsZero() && !time.Now().Before(deadline) {
+			return processed, nil
+		}
+		found, err := w.ProcessOneMediaJob(ctx)
+		if err != nil {
+			return processed, err
+		}
+		if !found {
+			return processed, nil // queue empty: exit instead of polling
+		}
+		processed++
+	}
+	return processed, nil
 }
 
 // sleep waits for d or until ctx is done, whichever comes first, so a poll
