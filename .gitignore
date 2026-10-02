@@ -39,3 +39,8 @@ tests/e2e/.auth/
 .DS_Store
 .idea/
 .vscode/
+
+# Local build output of ./apps/worker (go build -o worker) and Playwright output
+/worker
+/evidence/browser/report/
+/evidence/browser/results/
