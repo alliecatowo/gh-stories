@@ -28,10 +28,10 @@ gh stories setup     # explains and offers: gh alias set story stories
 gh stories doctor    # tells you what is and is not configured
 ```
 
-> **There is no public GitHub Stories service yet.** Everything server-side is
-> built, tested and published as a runnable container image — but nothing is
-> deployed, because this project has no hosting credentials. Until one exists,
-> point the clients at your own:
+> **A hosted GitHub Stories service is running on Google Cloud Run**, and release
+> binaries default to it. It has not been verified end to end with real
+> identities across clients yet, so treat it as experimental. You can also run
+> your own and point the clients at it:
 >
 > ```bash
 > export GHS_SERVICE_URL=https://your-service.example
@@ -41,7 +41,7 @@ gh stories doctor    # tells you what is and is not configured
 >
 > Running one takes a container, PostgreSQL and an S3-compatible bucket — see
 > the [runbook](docs/runbook.md). The remaining external gates are listed
-> honestly in [docs/blockers.md](docs/blockers.md).
+> in [docs/blockers.md](docs/blockers.md).
 
 `gh stories` is the canonical command namespace. Everything documented works
 under `gh stories` with no setup. `gh stories setup` additionally offers the
