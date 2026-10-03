@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0]
+
+### Added
+- Public launch: a live `public` Story is world-readable without a session.
+  Its canonical `/s/<id>` viewer, `GET /v1/stories/{id}` metadata and
+  `GET /v1/media/{id}/{variant}` bytes serve anonymous callers; anonymous
+  delivery increments an aggregate counter only (no named view, no IP
+  history). Authenticated media keeps `private, no-store` and named views.
+- Cloud Run production deployment: `infra/deploy/` manifests (API service
+  with max-instances/resource cost controls, bounded `worker -once` Job,
+  one-shot migrate Job), Cloud Scheduler triggers, `mise run deploy`, and a
+  tag-triggered deploy workflow (migrate once, deploy API, verify health and
+  media round trip).
+- Bounded worker mode (`worker -once -max-jobs N -max-duration D`,
+  `GHS_WORKER_ONCE/MAX_JOBS/MAX_DURATION`) for Cloud Run Jobs.
+- Follow import can be re-run from settings (opt-in re-authorization that
+  reuses no stored upstream token).
+- Local servers bind all interfaces, so dev and preview are reachable over
+  tailnet.
+
 ## [0.3.0]
 
 ### Fixed

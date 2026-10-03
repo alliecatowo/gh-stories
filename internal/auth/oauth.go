@@ -30,6 +30,10 @@ const (
 	// PurposeCLIApproval is a browser authorization that exists to approve a
 	// pending CLI login (pendingLoginID is set).
 	PurposeCLIApproval = "cli_approval"
+	// PurposeImport re-authorizes solely to read the GitHub follow graph for a
+	// manual re-import. The upstream token is never retained, so a later import
+	// has to ask again rather than reuse something stored.
+	PurposeImport = "import"
 )
 
 // ErrInvalidState is returned when a callback's state does not match a live,

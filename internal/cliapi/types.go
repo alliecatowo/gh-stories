@@ -55,6 +55,23 @@ type PendingLoginPoll struct {
 	User      *PublicUser `json:"user,omitempty"`
 }
 
+// DeviceLogin is returned by POST /auth/device/start: the user code and
+// GitHub's verification URI for a Device Authorization Grant login.
+type DeviceLogin struct {
+	DeviceLoginID   string    `json:"device_login_id"`
+	UserCode        string    `json:"user_code"`
+	VerificationURI string    `json:"verification_uri"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	IntervalSeconds int       `json:"interval_seconds"`
+}
+
+// DeviceLoginPoll is one POST /auth/device/poll response.
+type DeviceLoginPoll struct {
+	Status string      `json:"status"` // pending, slow_down, approved, denied, expired
+	Token  string      `json:"token,omitempty"`
+	User   *PublicUser `json:"user,omitempty"`
+}
+
 // MediaVariant is one rendition of a Story item's media.
 type MediaVariant struct {
 	Kind       string `json:"kind"` // image, video, poster, thumb, terminal

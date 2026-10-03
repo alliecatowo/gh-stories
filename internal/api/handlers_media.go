@@ -6,26 +6,30 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
+
 	"github.com/alliecatowo/gh-stories/internal/domain"
 	"github.com/alliecatowo/gh-stories/internal/httpx"
 	"github.com/alliecatowo/gh-stories/internal/store"
 )
 
-// getMedia is the authorization gateway for private media.
+// getMedia is the authorization gateway for media.
 //
 // Why a gateway rather than signed URLs: a signed URL keeps working after a
 // block, an audience narrowing, a deletion or expiry, because the signature
-// was minted before any of those happened. Streaming through an authenticated
-// handler makes revocation exact — session, audience, block, hide, suspension,
-// deletion and expiry are ALL re-checked on every single request, including
-// thumbnails and video range requests.
+// was minted before any of those happened. Streaming through a handler that
+// re-checks authorization on every request makes revocation exact — session,
+// audience, block, hide, suspension, deletion and expiry are ALL re-checked
+// on every single request, including thumbnails and video range requests.
+//
+// Anonymous access exists for exactly one case: a live public Story. Its
+// bytes are served with a short cacheable public directive and increment an
+// aggregate anonymous counter only; no per-viewer row and no IP history is
+// stored. All other visibilities remain session-gated, served private with
+// no-store, and record a named view for an authorized non-owner.
 //
 // There are no public object URLs anywhere in this product.
 func (s *Server) getMedia(w http.ResponseWriter, r *http.Request) error {
-	u, err := mustCaller(r)
-	if err != nil {
-		return err
-	}
 	storyID, err := pathUUID(r, "storyId")
 	if err != nil {
 		return err
@@ -37,6 +41,15 @@ func (s *Server) getMedia(w http.ResponseWriter, r *http.Request) error {
 	default:
 		return httpx.NotFound()
 	}
+
+	if u := caller(r); u != nil && u.Active() {
+		return s.servePrivateMedia(w, r, u, storyID, kind)
+	}
+	return s.servePublicMedia(w, r, storyID, kind)
+}
+
+func (s *Server) servePrivateMedia(w http.ResponseWriter, r *http.Request,
+	u *domain.User, storyID uuid.UUID, kind domain.VariantKind) error {
 
 	// The single shared predicate. Absent, expired, deleted, removed, blocked,
 	// hidden, suspended and out-of-audience all end here with the same 404.
@@ -100,6 +113,72 @@ func (s *Server) getMedia(w http.ResponseWriter, r *http.Request) error {
 	}
 	if _, err := io.Copy(w, obj.Body); err != nil {
 		// The client went away mid-stream. Nothing to report to them.
+		s.Log.Debug("media stream interrupted", "story_id", storyID, "err", err)
+	}
+	return nil
+}
+
+// servePublicMedia serves one variant of a live public Story to an anonymous
+// caller. The server, never an object-storage URL alone, decides access: the
+// Story is resolved through PublicStory first, and anything else is the same
+// 404 an unauthorized signed-in caller would get.
+//
+// Caching is deliberately short (60s browser, longer edge) so an expiry,
+// deletion, removal or audience narrowing propagates quickly. Vary on
+// Authorization keeps shared caches from mixing this with authenticated
+// responses. Anonymous delivery increments only the aggregate counter; no
+// per-viewer row and no IP history is stored.
+func (s *Server) servePublicMedia(w http.ResponseWriter, r *http.Request,
+	storyID uuid.UUID, kind domain.VariantKind) error {
+	item, err := s.Store.PublicStory(r.Context(), storyID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return httpx.NotFound()
+		}
+		return httpx.Internal(err)
+	}
+	variant := item.Variant(kind)
+	if variant == nil {
+		return httpx.NotFound()
+	}
+	obj, err := s.Objects.Get(r.Context(), variant.ObjectKey, r.Header.Get("Range"))
+	if err != nil {
+		return httpx.NotFound()
+	}
+	defer obj.Body.Close()
+
+	if kind.ContentBearing() {
+		if err := s.Store.RecordAnonymousView(r.Context(), storyID); err != nil {
+			s.Log.Warn("record anonymous view failed", "story_id", storyID, "err", err)
+		}
+	}
+
+	h := w.Header()
+	h.Set("Content-Type", firstNonEmpty(obj.ContentType, variant.MIME))
+	h.Set("Cache-Control", "public, max-age=60, s-maxage=300")
+	h.Add("Vary", "Authorization")
+	h.Set("Accept-Ranges", "bytes")
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Content-Disposition", "inline")
+	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	if obj.ETag != "" {
+		h.Set("ETag", obj.ETag)
+	}
+	if obj.ContentRange != "" {
+		h.Set("Content-Range", obj.ContentRange)
+	}
+	if obj.ContentLength > 0 {
+		h.Set("Content-Length", strconv.FormatInt(obj.ContentLength, 10))
+	}
+	status := obj.StatusCode
+	if status == 0 {
+		status = http.StatusOK
+	}
+	w.WriteHeader(status)
+	if r.Method == http.MethodHead {
+		return nil
+	}
+	if _, err := io.Copy(w, obj.Body); err != nil {
 		s.Log.Debug("media stream interrupted", "story_id", storyID, "err", err)
 	}
 	return nil

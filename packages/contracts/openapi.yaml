@@ -114,6 +114,47 @@ paths:
         "404": {$ref: "#/components/responses/Error"}
         "429": {$ref: "#/components/responses/Error"}
 
+  /auth/device/start:
+    post:
+      tags: [auth]
+      summary: Start a GitHub Device Authorization Grant login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_kind]
+              properties:
+                client_kind: {type: string, enum: [cli, browser_extension]}
+                client_label: {type: string, maxLength: 120, description: "Human label shown in the session list, e.g. 'gh stories on allies-mbp'"}
+      responses:
+        "201":
+          description: Device authorization created
+          content: {application/json: {schema: {$ref: "#/components/schemas/DeviceLogin"}}}
+        "429": {$ref: "#/components/responses/Error"}
+  /auth/device/poll:
+    post:
+      tags: [auth]
+      summary: Poll a device authorization (bounded, rate limited, single use)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_login_id]
+              properties:
+                device_login_id: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Current authorization state; token present exactly once on approval
+          content: {application/json: {schema: {$ref: "#/components/schemas/DeviceLoginPoll"}}}
+        "404": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+
   /auth/logout:
     post:
       tags: [auth]
@@ -266,7 +307,11 @@ paths:
   /stories/{storyId}:
     get:
       tags: [stories]
-      summary: Read one Story item the caller is authorized to see
+      summary: Read one Story item
+      description: |
+        Signed-in callers resolve through the full audience predicate; anonymous
+        callers may read a live public Story only. Anything else is 404.
+      security: []
       parameters: [{$ref: "#/components/parameters/StoryId"}]
       responses:
         "200": {description: Story item, content: {application/json: {schema: {$ref: "#/components/schemas/StoryItem"}}}}
@@ -315,7 +360,9 @@ paths:
         A view is recorded by the media authorization gateway when content-bearing
         media is delivered to an authorized non-owner. This endpoint records the
         client's separate rendering acknowledgement; it never creates a view for
-        an unauthorized caller.
+        an unauthorized caller. Anonymous callers may acknowledge a live public
+        Story; it is a no-op 204 that stores nothing.
+      security: []
       parameters: [{$ref: "#/components/parameters/StoryId"}]
       responses:
         "204": {description: Acknowledged}
@@ -391,12 +438,16 @@ paths:
   /media/{storyId}/{variant}:
     get:
       tags: [media]
-      summary: Authorization gateway for private media
+      summary: Authorization gateway for media (public Stories readable anonymously)
       description: |
         Checks session, audience, block, hide, suspension, deletion and expiry on
         every request including thumbnails and video range requests. Supports
         HTTP range. Delivering content-bearing media to an authorized non-owner
-        records a view. There are no public or long-lived media URLs.
+        records a view. Anonymous callers may fetch a live public Story's media;
+        it is served with short public caching and increments an aggregate
+        anonymous counter only — no per-viewer row, no IP history. There are no
+        public or long-lived object URLs.
+      security: []
       parameters:
         - {$ref: "#/components/parameters/StoryId"}
         - {name: variant, in: path, required: true, schema: {type: string, enum: [image, video, poster, thumb, terminal]}}
@@ -631,7 +682,7 @@ components:
         author_follows      — My followers (signed-in users who follow the author)
         mutuals             — Mutuals
         custom_list         — Custom list
-        public              — Public, anyone signed in
+        public              — Public, anyone, no sign-in required
       enum: [followers_of_author, author_follows, mutuals, custom_list, public]
 
     Emoji:
@@ -689,6 +740,24 @@ components:
         expires_at: {type: string, format: date-time}
         user: {$ref: "#/components/schemas/PublicUser"}
 
+    DeviceLogin:
+      type: object
+      required: [device_login_id, user_code, verification_uri, expires_at, interval_seconds]
+      properties:
+        device_login_id: {type: string, format: uuid}
+        user_code: {type: string, description: Short code the user matches on github.com}
+        verification_uri: {type: string, description: GitHub URL the user opens to authorize}
+        expires_at: {type: string, format: date-time}
+        interval_seconds: {type: integer}
+
+    DeviceLoginPoll:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [pending, slow_down, approved, denied, expired]}
+        token: {type: string, description: Present exactly once, on the first successful poll after approval}
+        user: {$ref: "#/components/schemas/PublicUser"}
+
     ImportSummary:
       type: object
       properties:
@@ -726,7 +795,7 @@ components:
         alt_text: {type: string, description: Author-supplied accessibility description}
         visibility: {$ref: "#/components/schemas/Visibility"}
         audience_list_id: {type: string, format: uuid}
-        audience_label: {type: string, description: Plain-language audience, e.g. "Public — anyone signed in"}
+        audience_label: {type: string, description: Plain-language audience, e.g. "Public — anyone, no sign-in required"}
         allow_replies: {type: boolean}
         allow_reactions: {type: boolean}
         media_kind: {type: string, enum: [image, video]}

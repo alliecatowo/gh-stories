@@ -22,15 +22,20 @@ import (
 // cmdLogin performs the service-mediated authorization flow.
 //
 // The CLI never reads, extracts or uploads the user's existing `gh` token.
-// It asks the service for a pending authorization, shows a code, and polls
-// until a human approves it in a browser. That is what makes this work over
-// SSH, where the remote host has no browser at all.
+// By default it asks the service for a pending authorization, shows a code,
+// and polls until a human approves it in a browser. That is what makes this
+// work over SSH, where the remote host has no browser at all.
+//
+// With --device it uses GitHub's Device Authorization Grant instead: the
+// service shows GitHub's own verification URI and user code, and the user
+// authorizes the GitHub App directly on github.com.
 func cmdLogin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	service, _, _ := globalFlags(fs)
 	noBrowser := fs.Bool("no-browser", false, "print the URL instead of opening a browser")
+	device := fs.Bool("device", false, "sign in with GitHub's device authorization flow")
 	if err := fs.Parse(args); err != nil {
-		return usagef("gh stories login [--no-browser] [--service URL]")
+		return usagef("gh stories login [--device] [--no-browser] [--service URL]")
 	}
 
 	sess, err := anonymousSession(*service)
@@ -38,6 +43,10 @@ func cmdLogin(ctx context.Context, args []string) error {
 		return err
 	}
 	label := clientLabel()
+
+	if *device {
+		return cmdLoginDevice(ctx, sess, *noBrowser, label)
+	}
 
 	pending, err := sess.Client.CreatePendingLogin(ctx, "cli", label)
 	if err != nil {
@@ -105,6 +114,89 @@ func cmdLogin(ctx context.Context, args []string) error {
 			return fmt.Errorf("the authorization was denied")
 		case "expired":
 			return fmt.Errorf("the authorization expired. Run `gh stories login` again")
+		}
+	}
+	return fmt.Errorf("timed out waiting for approval")
+}
+
+// cmdLoginDevice performs the GitHub Device Authorization Grant login. The
+// service starts the grant and polls GitHub on the CLI's behalf; this
+// command only relays the user code and keeps polling the service until the
+// user authorizes (or the grant expires) on github.com.
+func cmdLoginDevice(ctx context.Context, sess *session, noBrowser bool, label string) error {
+	device, err := sess.Client.StartDeviceLogin(ctx, "cli", label)
+	if err != nil {
+		return err
+	}
+
+	status("")
+	status("  Open:  %s", device.VerificationURI)
+	status("  Code:  %s", device.UserCode)
+	status("")
+	status("Enter the code above on the page to authorize this device.")
+
+	openedBrowser := false
+	if !noBrowser && !detectSSH() {
+		if err := openBrowser(device.VerificationURI); err == nil {
+			openedBrowser = true
+			status("Opened your browser.")
+		}
+	}
+	if !openedBrowser {
+		status("Open that URL on any device where you are signed in to GitHub.")
+	}
+	status("Waiting for approval…")
+
+	interval := time.Duration(device.IntervalSeconds) * time.Second
+	if interval < time.Second {
+		interval = 5 * time.Second
+	}
+	deadline := device.ExpiresAt
+	if deadline.IsZero() || !deadline.After(time.Now()) {
+		// The contract requires expires_at, but retain a bounded fallback for
+		// an older or misbehaving service rather than polling indefinitely.
+		deadline = time.Now().Add(10 * time.Minute)
+	}
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(interval):
+		}
+		poll, err := sess.Client.PollDeviceLogin(ctx, device.DeviceLoginID)
+		if err != nil {
+			return err
+		}
+		switch poll.Status {
+		case "slow_down":
+			interval += 5 * time.Second
+		case "approved":
+			store, err := credstore.Open()
+			if err != nil {
+				return fmt.Errorf("could not open a credential store: %w", err)
+			}
+			cred := credstore.Credential{
+				ServiceURL: sess.ServiceURL, Token: poll.Token, StoredAt: time.Now(),
+			}
+			if poll.User != nil {
+				cred.Login = poll.User.Login
+				cred.UserID = poll.User.GitHubID
+			}
+			if err := store.Save(cred); err != nil {
+				return fmt.Errorf("could not save your session: %w", err)
+			}
+			status("")
+			status("Signed in as %s.", cred.Login)
+			if store.Backend() != "keyring" {
+				status("No OS keyring was available, so the session was saved to a")
+				status("permission-restricted file instead. Run `gh stories doctor` for details.")
+			}
+			return nil
+		case "denied":
+			return fmt.Errorf("the authorization was denied")
+		case "expired":
+			return fmt.Errorf("the authorization expired. Run `gh stories login --device` again")
 		}
 	}
 	return fmt.Errorf("timed out waiting for approval")

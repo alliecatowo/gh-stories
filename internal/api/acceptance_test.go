@@ -196,8 +196,18 @@ func TestRevocationStopsKnownMediaRoutes(t *testing.T) {
 
 		require.Equal(t, http.StatusNoContent,
 			bob.do(http.MethodPost, "/v1/auth/logout", nil).StatusCode)
-		require.Equal(t, http.StatusUnauthorized, bob.get(path).StatusCode,
-			"a revoked session must stop working immediately")
+		// A revoked session is now an anonymous caller. A live public Story
+		// stays world-readable (200, publicly cached); identity-gated
+		// access stops immediately.
+		resp := bob.get(path)
+		require.Equal(t, http.StatusOK, resp.StatusCode,
+			"public media stays anonymous-readable after logout")
+		require.Contains(t, resp.Header.Get("Cache-Control"), "public")
+		drain(resp)
+		resp = bob.get("/v1/me")
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+			"a revoked session must stop working immediately on identity-gated routes")
+		drain(resp)
 	})
 }
 
@@ -355,21 +365,37 @@ func TestReplyIdempotency(t *testing.T) {
 	drain(resp)
 }
 
-// GATE: Anonymous callers get nothing.
+// GATE: Anonymous callers get exactly the public surface and nothing else.
+//
+// Public launch decision: a live public Story's metadata, media and render
+// acknowledgement are world-readable without a session. Identity-gated
+// surfaces (account, feed, inbox, settings, viewers, non-public Stories)
+// still refuse anonymous callers.
 func TestAnonymousIsRefused(t *testing.T) {
 	h, alice, _, _ := trio(t)
 	story := h.publish(alice, domain.VisibilityPublic, nil, "")
+	followersOnly := h.publish(alice, domain.VisibilityFollowersOfAuthor, nil, "")
 	anon := &actor{h: h}
 	for _, path := range []string{
 		"/v1/me", "/v1/feed", "/v1/inbox", "/v1/settings",
-		"/v1/stories/" + story.String(),
-		"/v1/media/" + story.String() + "/image",
+		"/v1/stories/" + followersOnly.String(),
+		"/v1/media/" + followersOnly.String() + "/image",
+		"/v1/stories/" + story.String() + "/viewers",
 	} {
 		resp := anon.get(path)
-		require.Equal(t, http.StatusUnauthorized, resp.StatusCode,
-			"%s must require identity — public still means 'anyone signed in'", path)
+		code := resp.StatusCode
 		drain(resp)
+		require.Contains(t, []int{http.StatusUnauthorized, http.StatusNotFound}, code,
+			"%s must not be world-readable", path)
 	}
+	// The public surface itself is anonymous-readable.
+	resp := anon.get("/v1/stories/" + story.String())
+	require.Equal(t, http.StatusOK, resp.StatusCode, "public metadata must be anonymous-readable")
+	drain(resp)
+	resp = anon.get("/v1/media/" + story.String() + "/image")
+	require.Equal(t, http.StatusOK, resp.StatusCode, "public media must be anonymous-readable")
+	require.Contains(t, resp.Header.Get("Cache-Control"), "public")
+	drain(resp)
 }
 
 // GATE: Moderator routes are deny-by-default and do not advertise themselves.
@@ -381,8 +407,10 @@ func TestModerationIsDenyByDefault(t *testing.T) {
 	drain(resp)
 }
 
-// GATE: Media responses must not be cacheable by a shared cache, or a later
-// request could bypass the permission check.
+// GATE: Media caching is split by audience. Session-gated bytes must not be
+// shareable-cacheable, or a later request could bypass the permission check.
+// Anonymous public bytes are short-cacheable and vary on Authorization so the
+// two never mix in a shared cache.
 func TestMediaIsNotShareableCacheable(t *testing.T) {
 	h, alice, bob, _ := trio(t)
 	story := h.publish(alice, domain.VisibilityPublic, nil, "")
@@ -472,5 +500,65 @@ func TestReportingCannotProbeForPrivateStories(t *testing.T) {
 	})
 	require.Equal(t, http.StatusNotFound, resp.StatusCode,
 		"reporting a Story you cannot see must be indistinguishable from it not existing")
+	drain(resp)
+}
+
+// GATE: Public launch — a live public Story is world-readable without a
+// session; every other visibility stays session-gated. Anonymous media is
+// cacheable and increments only the aggregate counter: no named viewer row
+// and no IP history is retained.
+func TestPublicStoryReadableAnonymously(t *testing.T) {
+	h, alice, _, carol := trio(t)
+	story := h.publish(alice, domain.VisibilityPublic, nil, "hello world")
+	id := story.String()
+
+	anon := func(method, path string) *http.Response {
+		t.Helper()
+		req, err := http.NewRequest(method, h.srv.URL+path, nil)
+		require.NoError(t, err)
+		resp, err := h.srv.Client().Do(req)
+		require.NoError(t, err)
+		return resp
+	}
+
+	// Anonymous metadata works for public.
+	resp := anon(http.MethodGet, "/v1/stories/"+id)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	item := decode[storyItem](t, resp)
+	require.Equal(t, "public", item.Visibility)
+
+	// Anonymous media works and is cacheable.
+	resp = anon(http.MethodGet, "/v1/media/"+id+"/image")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, resp.Header.Get("Cache-Control"), "public")
+	body := drain(resp)
+	require.NotEmpty(t, body)
+
+	// Anonymous render acknowledgement is a no-op 204 that stores nothing.
+	resp = anon(http.MethodPost, "/v1/stories/"+id+"/view")
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	drain(resp)
+
+	// No named viewer row was created for the anonymous fetch.
+	viewers := decode[viewerList](t, alice.get("/v1/stories/"+id+"/viewers"))
+	require.Zero(t, viewers.Total, "anonymous delivery must not create a named view")
+
+	// The aggregate counter did move.
+	n, err := h.store.AnonymousViewCount(t.Context(), story)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	// A followers-only Story stays invisible anonymously.
+	private := h.publish(alice, domain.VisibilityFollowersOfAuthor, nil, "private")
+	require.Equal(t, http.StatusNotFound,
+		anon(http.MethodGet, "/v1/stories/"+private.String()).StatusCode)
+	require.Equal(t, http.StatusNotFound,
+		anon(http.MethodGet, "/v1/media/"+private.String()+"/image").StatusCode)
+
+	// ... but an eligible signed-in caller still gets it, privately cached.
+	require.Equal(t, http.StatusOK, carol.get("/v1/stories/"+id).StatusCode)
+	resp = carol.get("/v1/media/" + id + "/image")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, resp.Header.Get("Cache-Control"), "private")
 	drain(resp)
 }

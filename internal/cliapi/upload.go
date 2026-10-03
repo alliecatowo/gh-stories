@@ -84,11 +84,18 @@ func (c *Client) FinalizeUpload(ctx context.Context, uploadID string, byteSize i
 
 // PollStoryUntilTerminal polls GET /stories/{id} at interval (default 1.5s)
 // until the item reaches a terminal state (published, failed, deleted or
-// removed) or ctx is cancelled. onUpdate, when non-nil, is called with every
-// intermediate and final observation.
-func (c *Client) PollStoryUntilTerminal(ctx context.Context, storyID string, interval time.Duration, onUpdate func(*StoryItem)) (*StoryItem, error) {
+// removed), ctx is cancelled, or maxWait elapses. maxWait <= 0 means poll
+// until ctx ends — callers that expose this to humans must pass a real
+// bound instead, or a stalled worker turns the CLI into a forever-hang
+// that looks exactly like a frozen terminal.
+func (c *Client) PollStoryUntilTerminal(ctx context.Context, storyID string, interval, maxWait time.Duration, onUpdate func(*StoryItem)) (*StoryItem, error) {
 	if interval <= 0 {
 		interval = 1500 * time.Millisecond
+	}
+	if maxWait > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, maxWait)
+		defer cancel()
 	}
 	for {
 		item, err := c.GetStory(ctx, storyID)
@@ -132,6 +139,9 @@ type UploadRequest struct {
 	// PollInterval overrides the default polling interval used while
 	// waiting for processing to finish.
 	PollInterval time.Duration
+	// MaxWait bounds how long Upload polls for a terminal state. Zero means
+	// poll until ctx ends; human-facing callers must set a real bound.
+	MaxWait time.Duration
 	// OnStateChange is called with every observed StoryItem state,
 	// including the initial "processing" one right after finalize, so
 	// callers can print "uploaded, processing..." before the final
@@ -160,7 +170,7 @@ func (c *Client) Upload(ctx context.Context, req UploadRequest) (*StoryItem, err
 	if terminalStoryStates[item.State] {
 		return item, nil
 	}
-	return c.PollStoryUntilTerminal(ctx, item.ID, req.PollInterval, req.OnStateChange)
+	return c.PollStoryUntilTerminal(ctx, item.ID, req.PollInterval, req.MaxWait, req.OnStateChange)
 }
 
 // progressReader wraps an io.Reader, invoking onProgress after every Read
