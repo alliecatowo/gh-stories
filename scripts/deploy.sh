@@ -56,7 +56,8 @@ if ! gcloud run jobs describe "gh-stories-migrate" --project="$PROJECT" --region
   # first deploy gets the exact same env, secrets and service account as
   # every later one.
   gcloud run jobs create "gh-stories-migrate" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
-    --args="migrate" --task-timeout=300 --max-retries=0 >/dev/null
+    --args="migrate" --task-timeout=300 --max-retries=0 \
+    --service-account="gh-stories-worker@${PROJECT}.iam.gserviceaccount.com" >/dev/null
 fi
 gcloud run jobs replace "$RENDERED/migrate-job.yaml" --project="$PROJECT" --region="$REGION" >/dev/null
 EXEC="$(gcloud run jobs execute "gh-stories-migrate" --project="$PROJECT" \
@@ -80,7 +81,8 @@ ghs_ok "API deployed (public invoker)"
 ghs_step "Upserting worker job + schedules"
 if ! gcloud run jobs describe "$WORKER_JOB" --project="$PROJECT" --region="$REGION" >/dev/null 2>&1; then
   gcloud run jobs create "$WORKER_JOB" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
-    --args="worker,-once,-max-jobs=20,-max-duration=90s" --task-timeout=120 --max-retries=0 --cpu=1 --memory=512Mi >/dev/null
+    --args="worker,-once,-max-jobs=20,-max-duration=90s" --task-timeout=120 --max-retries=0 --cpu=1 --memory=512Mi \
+    --service-account="gh-stories-worker@${PROJECT}.iam.gserviceaccount.com" >/dev/null
 fi
 gcloud run jobs replace "$RENDERED/worker-job.yaml" --project="$PROJECT" --region="$REGION" >/dev/null
 GHS_GCP_PROJECT="$PROJECT" GHS_REGION="$REGION" GHS_WORKER_JOB="$WORKER_JOB" \
