@@ -5,9 +5,11 @@
 # are free; each extra costs $0.10/month). The worker is lease-based and
 # idempotent: each run does one cleanup pass (expiry, GC, retention purges,
 # physical object deletion) and drains any queued media jobs, then exits.
-# Upload latency is therefore up to ~15 minutes. Do NOT add a 2-minute
-# trigger: it multiplies container starts (and Secret Manager reads) 7.5x.
-# For prompt processing, trigger the job from the API on upload instead.
+# Uploads also start the job directly (the API calls jobs.run on finalize,
+# GHS_WORKER_TRIGGER_URL), so this sweep is the backstop for a missed trigger
+# and the cleanup pass. It stays at 15 minutes, not daily: physical deletion of
+# expired media targets 15 minutes (config PhysicalDeleteTarget). Do NOT add a
+# 2-minute trigger: it multiplies container starts (and Secret Manager reads).
 #
 # Uses the scheduler service account with run.developer on the job only, so
 # no trigger credential lives in the repository. Safe to re-run: an existing

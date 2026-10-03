@@ -63,6 +63,12 @@ gcloud run jobs add-iam-policy-binding gh-stories-worker \
   --project="$GHS_GCP_PROJECT" --region="$GHS_REGION" \
   --member="serviceAccount:gh-stories-scheduler@${GHS_GCP_PROJECT}.iam.gserviceaccount.com" \
   --role="roles/run.developer"
+# The API starts the same job right after an upload finalizes (event-driven
+# processing, GHS_WORKER_TRIGGER_URL in api-service.yaml):
+gcloud run jobs add-iam-policy-binding gh-stories-worker \
+  --project="$GHS_GCP_PROJECT" --region="$GHS_REGION" \
+  --member="serviceAccount:gh-stories-api@${GHS_GCP_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/run.developer"
 ```
 
 ## 1. State and media (operator, Neon + Cloudflare dashboards)
@@ -110,7 +116,8 @@ mise run deploy
 1. executes the `gh-stories-migrate` job and waits for success,
 2. deploys the API service,
 3. upserts the worker job (1 vCPU / 512Mi, 120s, no retries) and its single
-   15-minute scheduler trigger,
+   15-minute scheduler trigger (the safety net and cleanup sweep; uploads
+   also start the job directly, so media no longer waits for the sweep),
 4. verifies `/v1/health/ready` and an **authenticated** media round trip
    (metadata 200 + private `no-store`) using a token from
    `GHS_VERIFY_TOKEN`, plus an **anonymous** public check

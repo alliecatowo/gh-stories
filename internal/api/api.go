@@ -99,6 +99,10 @@ type Server struct {
 	Auth    AuthService
 	Log     *slog.Logger
 
+	// Worker, when set, is poked after a successful finalize so media is
+	// processed promptly. Optional: the scheduled sweep is the backstop.
+	Worker WorkerTrigger
+
 	limiter *ratelimit.Limiter
 	mux     http.Handler
 }

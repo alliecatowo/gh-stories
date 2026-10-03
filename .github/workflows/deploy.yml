@@ -1,0 +1,62 @@
+name: Deploy
+
+# Manual production deploy: published image tag -> migrate once -> deploy API
+# and worker -> verify health + authenticated media round trip.
+#
+# Manual only, on purpose: nothing deploys automatically on release. The
+# image is never built here (the release workflow owns the GHCR image); this
+# redeploys an existing release tag. Run it from Actions > Deploy > Run
+# workflow with the tag, e.g. v0.5.3.
+#
+# One-time operator setup (see infra/deploy/README.md):
+#   * an environment named `production` (add required reviewers if wanted)
+#   * vars.GHS_GCP_PROJECT, vars.GHS_REGION, vars.GHS_SERVICE_HOST,
+#     vars.R2_ACCOUNT_ID, vars.GCP_WIF_PROVIDER, vars.GCP_DEPLOYER_SA
+#   * secrets.GHS_VERIFY_TOKEN (a production session token for the
+#     authenticated round trip; rotate after proving the product)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to deploy (e.g. v0.5.3)
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          version: ">= 495.0.0"
+
+      - name: Deploy the tagged image
+        env:
+          GHS_GCP_PROJECT: ${{ vars.GHS_GCP_PROJECT }}
+          GHS_REGION: ${{ vars.GHS_REGION }}
+          GHS_SERVICE: gh-stories-api
+          GHS_WORKER_JOB: gh-stories-worker
+          SERVICE_HOST: ${{ vars.GHS_SERVICE_HOST }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          GHS_IMAGE_TAG: ${{ inputs.tag }}
+          GHS_VERIFY_TOKEN: ${{ secrets.GHS_VERIFY_TOKEN }}
+        run: bash scripts/deploy.sh

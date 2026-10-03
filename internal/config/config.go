@@ -44,6 +44,11 @@ type Config struct {
 
 	SecretKey []byte
 
+	// WorkerTriggerURL, when set, is the Cloud Run Jobs run endpoint the API
+	// calls after an upload finalizes so media is processed promptly.
+	// Optional: the scheduled worker sweep remains the backstop.
+	WorkerTriggerURL string
+
 	MaxUploadBytes  int64
 	MaxVideoSeconds int
 	MaxImagePixels  int64
@@ -149,6 +154,7 @@ func load(lookup func(string) (string, bool)) (*Config, error) {
 
 	secret := req("GHS_SECRET_KEY")
 	c.SecretKey = []byte(secret)
+	c.WorkerTriggerURL = get("GHS_WORKER_TRIGGER_URL", "")
 
 	c.S3ForcePathStyle = boolOf(get("GHS_S3_FORCE_PATH_STYLE", "false"))
 	c.TestIdentityProvider = boolOf(get("GHS_TEST_IDENTITY_PROVIDER", "false"))
@@ -211,6 +217,9 @@ func (c *Config) validate() error {
 		if isLoopback(c.PublicURL.Hostname()) {
 			problems = append(problems, "GHS_PUBLIC_URL must not be a loopback address in production")
 		}
+	}
+	if c.WorkerTriggerURL != "" && !strings.HasPrefix(c.WorkerTriggerURL, "https://") {
+		problems = append(problems, "GHS_WORKER_TRIGGER_URL must use https in production")
 	}
 	if strings.Contains(strings.ToLower(string(c.SecretKey)), "change-me") {
 		problems = append(problems, "GHS_SECRET_KEY is still the development placeholder")
