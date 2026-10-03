@@ -17,9 +17,9 @@ updates:
   schedule:
     interval: weekly
   ignore:
-  # apps/site stays on TypeScript 6 because `astro check` refuses TypeScript 7
-  # (astro-build/astro, language-tools/ts-content-mapper). Remove once Astro
-  # ships TS 7 support, then bump apps/site to the same TypeScript as the rest.
+  # The root and packages/contracts (openapi-typescript 7.x peers typescript
+  # ^5, no JS API in TS 7) and apps/site (`astro check` refuses TS 7) stay on
+  # TypeScript 6. Remove once both ship TS 7 support, then bump them.
   - dependency-name: typescript
     update-types:
     - version-update:semver-major
