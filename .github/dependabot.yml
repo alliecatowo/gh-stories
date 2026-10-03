@@ -16,6 +16,13 @@ updates:
   directory: /
   schedule:
     interval: weekly
+  ignore:
+  # The root and packages/contracts (openapi-typescript 7.x peers typescript
+  # ^5, no JS API in TS 7) and apps/site (`astro check` refuses TS 7) stay on
+  # TypeScript 6. Remove once both ship TS 7 support, then bump them.
+  - dependency-name: typescript
+    update-types:
+    - version-update:semver-major
   groups:
     minor-and-patch:
       update-types:
