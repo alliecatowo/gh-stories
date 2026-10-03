@@ -47,11 +47,11 @@ for sa in gh-stories-api gh-stories-worker gh-stories-scheduler gh-stories-deplo
   gcloud iam service-accounts create "$sa" --project="$GHS_GCP_PROJECT"
 done
 # API/worker read their own secrets only:
-# (the worker needs only the first four; the API also needs the GitHub pair)
+# (both need the GitHub pair: production config validation requires it)
 for sa in gh-stories-api gh-stories-worker; do
   secrets="ghs-production-database-url ghs-production-r2-access-key-id \
-      ghs-production-r2-secret-access-key ghs-production-secret-key"
-  [ "$sa" = gh-stories-api ] && secrets="$secrets ghs-production-github-client-id ghs-production-github-client-secret"
+      ghs-production-r2-secret-access-key ghs-production-secret-key \
+      ghs-production-github-client-id ghs-production-github-client-secret"
   for secret in $secrets; do
     gcloud secrets add-iam-policy-binding "$secret" --project="$GHS_GCP_PROJECT" \
       --member="serviceAccount:${sa}@${GHS_GCP_PROJECT}.iam.gserviceaccount.com" \
@@ -73,11 +73,13 @@ gcloud run jobs add-iam-policy-binding gh-stories-worker \
 
 ## 1. State and media (operator, Neon + Cloudflare dashboards)
 
-1. Create a Neon project and production branch; store its pooled Postgres
-   URL as `ghs-production-database-url` in Secret Manager. The code works
-   through PgBouncer (the pooled `-pooler` host) because it uses unnamed
-   statements; the direct host also works. Neon's free tier suspends compute
-   after 5 idle minutes, so keep the worker bounded (see worker-job.yaml).
+1. Create a Neon project and production branch; store its **direct**
+   (non-`-pooler`) Postgres URL as `ghs-production-database-url` in Secret
+   Manager. The pooled `-pooler` host (PgBouncer transaction mode) does not
+   work: pgx's describe-then-execute splits across backends and fails with
+   "unnamed prepared statement does not exist". Neon's free tier suspends
+   compute after 5 idle minutes, so keep the worker bounded (see
+   worker-job.yaml).
 2. Create one **private** R2 bucket (e.g. `gh-stories-media`).
 3. Create a narrowly scoped R2 token (this bucket, read/write only) and store
    its key id/secret as `ghs-production-r2-access-key-id` /

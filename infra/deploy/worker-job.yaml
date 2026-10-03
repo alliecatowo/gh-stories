@@ -84,3 +84,15 @@ spec:
                     secretKeyRef:
                       name: ghs-production-secret-key
                       key: latest
+                # Production config validation requires the GitHub OAuth pair
+                # even though the worker never serves logins.
+                - name: GHS_GITHUB_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-github-client-id
+                      key: latest
+                - name: GHS_GITHUB_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: ghs-production-github-client-secret
+                      key: latest
