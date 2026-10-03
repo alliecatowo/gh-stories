@@ -179,7 +179,9 @@ func (s *Server) postFinalize(w http.ResponseWriter, r *http.Request) error {
 		}
 		return httpx.Internal(err)
 	}
-	_ = created // a replayed finalize returns the original item, not a duplicate
+	if created {
+		s.kickWorker(r.Context())
+	}
 
 	item, err := s.Store.OwnStory(r.Context(), u.ID, storyID)
 	if err != nil {
@@ -218,4 +220,19 @@ func sanitizeFilename(name string) string {
 // cannot influence where bytes land.
 func newUploadKey(ownerID string) string {
 	return "u/" + ownerID + "/" + uuid.NewString()
+}
+
+// kickWorker asks the worker to run now. It never fails the request: the
+// scheduled sweep will pick the item up if the trigger is unavailable. It runs
+// synchronously (bounded) because Cloud Run throttles CPU once the response
+// has been written.
+func (s *Server) kickWorker(ctx context.Context) {
+	if s.Worker == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.Worker.Trigger(ctx); err != nil {
+		s.Log.Warn("worker trigger failed; the scheduled sweep will process the upload", "err", err.Error())
+	}
 }

@@ -256,7 +256,8 @@ func cmdDoctor(ctx context.Context, args []string) error {
 	}
 
 	if url != "" {
-		probeCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		// Generous: a scale-to-zero Cloud Run service needs a cold start.
+		probeCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		defer cancel()
 		if err := pingService(probeCtx, url); err != nil {
 			out("  reachable          no — %s", err)

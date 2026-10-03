@@ -8,7 +8,8 @@
 # 2 retries, burned ~$210 in 18 days. Keep it small and bounded:
 #
 #   * 1 vCPU / 512Mi, task-timeout 120s, max-retries 0, taskCount 1
-#   * ONE Cloud Scheduler trigger (see scheduler-jobs.sh), every 15 minutes
+#   * ONE Cloud Scheduler trigger (see scheduler-jobs.sh), every 15 minutes, plus an API-started run
+#     per finalized upload (coalesced to one per 10s)
 #   * only the secrets the worker needs (4; Secret Manager bills per access,
 #     and Cloud Run resolves every secretKeyRef at each container start)
 #

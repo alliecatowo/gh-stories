@@ -100,6 +100,10 @@ spec:
               value: "60"
             - name: GHS_MAX_IMAGE_PIXELS
               value: "50000000"
+            # Starts the worker job right after an upload finalizes. The API
+            # service account needs roles/run.developer on the job (README).
+            - name: GHS_WORKER_TRIGGER_URL
+              value: "https://us-central1-run.googleapis.com/v2/projects/GHS_GCP_PROJECT/locations/us-central1/jobs/gh-stories-worker:run"
             - name: GHS_DATABASE_URL
               valueFrom:
                 secretKeyRef:

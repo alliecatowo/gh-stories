@@ -121,6 +121,10 @@ func run(logger *slog.Logger, migrateOnly, autoMigrate bool) error {
 		&authAdapter{svc: authService, cfg: cfg},
 		logger)
 
+	if cfg.WorkerTriggerURL != "" {
+		apiServer.Worker = &api.CloudRunJobTrigger{RunURL: cfg.WorkerTriggerURL}
+	}
+
 	accountApp, err := account.New(cfg, st, &authAdapter{svc: authService, cfg: cfg})
 	if err != nil {
 		return fmt.Errorf("account application: %w", err)
