@@ -81,9 +81,10 @@ const visibleToViewer = `(
 					  AND al.owner_user_id = si.author_user_id
 					  AND al.deleted_at IS NULL
 					  AND m.github_user_id = $2::bigint)
-				-- "Public — anyone signed in". Identity is still required,
-				-- because this product exposes named viewers.
-				WHEN 'public' THEN true
+			-- "Public — anyone, no sign-in required". Authenticated callers
+			-- match here; anonymous callers are served by PublicStory, which
+			-- applies the same published/expiry/author checks without a graph.
+			WHEN 'public' THEN true
 				ELSE false
 			END
 		)

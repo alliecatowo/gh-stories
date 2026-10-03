@@ -3,6 +3,7 @@ package terminal
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -126,6 +127,14 @@ func Detect(ctx context.Context, in *os.File, out *os.File, override Protocol) (
 		return caps, nil
 	}
 
+	// A cached graphics verdict from this exact environment skips the probe
+	// entirely: repeat runs answer instantly instead of re-paying up to the
+	// full probe budget. Cols/rows above already came from a fresh ioctl.
+	if hit := loadCapCache(); hit != nil {
+		hit.ColsCells, hit.RowsCells = caps.ColsCells, caps.RowsCells
+		return *hit, nil
+	}
+
 	buf, err := runProbe(ctx, in, out, caps.InTmux)
 	if err != nil {
 		// A probe failure (raw mode unavailable, write error, ...) is not
@@ -137,9 +146,27 @@ func Detect(ctx context.Context, in *os.File, out *os.File, override Protocol) (
 	}
 
 	pr := parseProbe(buf)
+	if os.Getenv("GHS_DEBUG_PROBE") != "" {
+		debugProbe(buf, pr)
+	}
 	resolveCellGeometry(&caps, pr)
 	decideProtocol(&caps, pr)
+	storeCapCache(&caps, pr)
 	return caps, nil
+}
+
+// debugProbe dumps the raw probe reply for terminal-compatibility debugging.
+// Set GHS_DEBUG_PROBE=1 and run `gh stories doctor`: the hex dump shows
+// exactly what the terminal sent back (or that nothing arrived at all),
+// which is the ground truth for "couldn't detect in time" reports.
+func debugProbe(buf []byte, pr probeResult) {
+	fmt.Fprintf(os.Stderr, "ghs probe: %d byte(s) in %q (tmux=%v screen=%v ssh=%v)\n",
+		len(buf), os.Getenv("TERM_PROGRAM"),
+		os.Getenv("TMUX") != "", os.Getenv("STY") != "",
+		os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "")
+	fmt.Fprintf(os.Stderr, "ghs probe: raw=%q\n", buf)
+	fmt.Fprintf(os.Stderr, "ghs probe: parsed kittyOK=%v daSeen=%v cell=%dx%d win=%dx%d\n",
+		pr.kittyOK, pr.daSeen, pr.cellW, pr.cellH, pr.winW, pr.winH)
 }
 
 func populateEnvHints(caps *Capabilities) {
@@ -217,6 +244,18 @@ func decideProtocol(caps *Capabilities, pr probeResult) {
 	if pr.kittyOK {
 		caps.Protocol = ProtocolKitty
 		caps.Reason = "kitty graphics protocol query succeeded"
+		return
+	}
+	if os.Getenv("TERM_PROGRAM") == "ghostty" {
+		// Ghostty documents native kitty-graphics support, and the DA fence
+		// above proves this exact channel round-trips escape queries — so a
+		// missing kitty OK here means Ghostty ignored that one query, not
+		// that graphics are unavailable. An unrecognized kitty escape is
+		// ignored by terminals, not rendered as garbage, so trusting the
+		// vendor here fails safe. (Ghostty is deliberately NOT an iTerm2-
+		// protocol signal: it does not implement OSC 1337.)
+		caps.Protocol = ProtocolKitty
+		caps.Reason = "Ghostty implements the kitty graphics protocol; probe channel verified live via device-attributes fence"
 		return
 	}
 	if isITermLikeEnv() {

@@ -41,17 +41,36 @@ type Server struct {
 	Cfg   *config.Config
 	Store *store.Store
 	Auth  Authenticator
-	tmpl  *template.Template
+	tmpl  map[string]*template.Template
 }
 
 func New(cfg *config.Config, st *store.Store, auth Authenticator) (*Server, error) {
-	tmpl, err := template.New("").Funcs(template.FuncMap{
+	base, err := template.New("").Funcs(template.FuncMap{
 		"relative": relativeTime,
 		"label":    func(v domain.Visibility) string { return v.Label() },
 		"ptr":      func(t time.Time) *time.Time { return &t },
-	}).ParseFS(templateFS, "templates/*.html")
+	}).ParseFS(templateFS, "templates/layout.html")
 	if err != nil {
 		return nil, err
+	}
+	entries, err := templateFS.ReadDir("templates")
+	if err != nil {
+		return nil, err
+	}
+	tmpl := make(map[string]*template.Template, len(entries)-1)
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == "layout.html" {
+			continue
+		}
+		page, err := base.Clone()
+		if err != nil {
+			return nil, err
+		}
+		page, err = page.ParseFS(templateFS, "templates/"+entry.Name())
+		if err != nil {
+			return nil, err
+		}
+		tmpl[entry.Name()] = page
 	}
 	return &Server{Cfg: cfg, Store: st, Auth: auth, tmpl: tmpl}, nil
 }
@@ -76,6 +95,8 @@ func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/login", s.getLogin)
 	r.Get("/account", s.getHome)
+	r.Get("/account/onboarding", s.getOnboarding)
+	r.Post("/account/onboarding/skip", s.postSkipOnboarding)
 	// /device is the short URL the CLI prints. The user opens it, types the
 	// code their terminal showed, and approves.
 	r.Get("/device", s.getDevice)
@@ -119,7 +140,12 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request, name string, d pag
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Content-Security-Policy",
 		"default-src 'none'; img-src 'self'; media-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
-	if err := s.tmpl.ExecuteTemplate(w, name, d); err != nil {
+	tmpl, ok := s.tmpl[name]
+	if !ok {
+		http.Error(w, "template error", http.StatusInternalServerError)
+		return
+	}
+	if err := tmpl.ExecuteTemplate(w, name, d); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
 }
@@ -134,9 +160,8 @@ func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) *domain.Use
 }
 
 func (s *Server) getHome(w http.ResponseWriter, r *http.Request) {
-	u := s.caller(r)
+	u := s.requireUser(w, r)
 	if u == nil {
-		s.page(w, r, "signin.html", pageData{Title: "Sign in"})
 		return
 	}
 	items, err := s.Store.OwnSequence(r.Context(), u.ID)
@@ -145,9 +170,19 @@ func (s *Server) getHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unread, _ := s.Store.UnreadCount(r.Context(), u.ID)
+	q := r.URL.Query()
 	s.page(w, r, "home.html", pageData{
 		Title: "Your Stories", User: u,
-		Data: map[string]any{"Items": items, "Unread": unread},
+		Data: map[string]any{
+			"Items": items, "Unread": unread,
+			"ImportState":      q.Get("import"),
+			"ImportAdded":      q.Get("added"),
+			"ImportAlready":    q.Get("already"),
+			"ImportUnfollowed": q.Get("unfollowed"),
+			"ImportBlocked":    q.Get("blocked"),
+			"ImportSample":     importSample(q.Get("sample")),
+			"NeedsOnboarding":  u.OnboardedAt == nil,
+		},
 	})
 }
 
@@ -156,6 +191,35 @@ func (s *Server) getHome(w http.ResponseWriter, r *http.Request) {
 // The user must see WHICH client is asking and a code that matches what their
 // terminal printed. That match is what stops an attacker from starting a login
 // and tricking someone else into approving it.
+// getOnboarding offers the follow import at first login. It is opt-out: the
+// import is presented as the default action, and skipping is a plain
+// alternative rather than a dark pattern.
+func (s *Server) getOnboarding(w http.ResponseWriter, r *http.Request) {
+	u := s.requireUser(w, r)
+	if u == nil {
+		return
+	}
+	if u.OnboardedAt != nil {
+		http.Redirect(w, r, "/account", http.StatusFound)
+		return
+	}
+	s.page(w, r, "onboarding.html", pageData{Title: "Welcome", User: u})
+}
+
+// postSkipOnboarding records that the person declined the import. Nothing is
+// read from GitHub at all in that case.
+func (s *Server) postSkipOnboarding(w http.ResponseWriter, r *http.Request) {
+	u := s.requireUser(w, r)
+	if u == nil {
+		return
+	}
+	if err := s.Store.MarkOnboarded(r.Context(), nil, u.ID); err != nil {
+		http.Error(w, "could not save that", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/account", http.StatusSeeOther)
+}
+
 func (s *Server) getAuthorize(w http.ResponseWriter, r *http.Request) {
 	u := s.requireUser(w, r)
 	if u == nil {
@@ -281,21 +345,54 @@ func (s *Server) getModeration(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// getExternalViewer is what `gh stories` opens with Enter, and what a private
-// Story's "open externally" leads to.
+// getExternalViewer is the canonical /s/<id> viewer: `gh stories` opens it
+// with Enter, a private Story's "open externally" leads to it, and a public
+// Story's share link IS it.
 //
-// It works for private Stories because it goes through normal authorization:
-// the same visibility predicate as everything else, and the media itself is
-// still fetched through the authenticated gateway. It is never a permanent
-// public media link.
+// A live public Story renders without a session so the link works outside
+// GitHub Stories. Every other visibility redirects anonymous callers to
+// login and resolves signed-in callers through the normal predicate; the
+// media itself is still fetched through the authorization gateway, so this
+// is never a permanent public media link.
 func (s *Server) getExternalViewer(w http.ResponseWriter, r *http.Request) {
-	u := s.requireUser(w, r)
-	if u == nil {
-		return
-	}
 	id, err := uuid.Parse(chi.URLParam(r, "storyId"))
 	if err != nil {
 		http.NotFound(w, r)
+		return
+	}
+	u := s.caller(r)
+	if u == nil {
+		item, err := s.Store.PublicStory(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				// Expired, deleted, blocked, out of audience, non-public or
+				// never existed: anonymous callers go to login, which after
+				// sign-in resolves the real authorization. This avoids
+				// oracle-ing public vs private to anonymous probes.
+				http.Redirect(w, r, "/login?return_to="+template.URLQueryEscaper(r.URL.Path), http.StatusFound)
+				return
+			}
+			http.Error(w, "error", http.StatusInternalServerError)
+			return
+		}
+		kind := domain.VariantImage
+		if item.MediaKind() == domain.MediaVideo {
+			kind = domain.VariantVideo
+		}
+		s.page(w, r, "story.html", pageData{
+			Title: "Story by " + item.Author.Login,
+			Data: map[string]any{
+				"Item":     item,
+				"IsVideo":  item.MediaKind() == domain.MediaVideo,
+				"MediaURL": "/v1/media/" + item.ID.String() + "/" + string(kind),
+				"Poster":   "/v1/media/" + item.ID.String() + "/poster",
+				"Expires":  item.ExpiresAt,
+			},
+		})
+		return
+	}
+	if !u.Active() {
+		http.Error(w, "suspended", http.StatusForbidden)
 		return
 	}
 	item, err := s.Store.StoryForViewer(r.Context(), u.ID, u.GitHubID, id)
@@ -361,4 +458,33 @@ func itoa(n int) string {
 		b[i] = '-'
 	}
 	return string(b[i:])
+}
+
+// importSample turns the comma-separated logins carried on the post-import
+// redirect back into a list, dropping anything that is not a GitHub-shaped
+// login. The template escapes what it renders; this exists so the page never
+// renders an arbitrary attacker-chosen string at all.
+func importSample(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	out := make([]string, 0, 5)
+	for _, name := range strings.Split(raw, ",") {
+		if name == "" || len(name) > 39 || len(out) >= 5 || name[0] == '-' || name[len(name)-1] == '-' {
+			continue
+		}
+		ok := true
+		for i := 0; i < len(name); i++ {
+			c := name[i]
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
+				c == '-' && (i == 0 || name[i-1] != '-')) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			out = append(out, name)
+		}
+	}
+	return out
 }

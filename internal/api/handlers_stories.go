@@ -34,35 +34,49 @@ func (s *Server) storyForCaller(r *http.Request, u *domain.User, id uuid.UUID) (
 }
 
 func (s *Server) getStory(w http.ResponseWriter, r *http.Request) error {
-	u, err := mustCaller(r)
-	if err != nil {
-		return err
-	}
 	id, err := pathUUID(r, "storyId")
 	if err != nil {
 		return err
 	}
-	it, err := s.storyForCaller(r, u, id)
-	if err != nil {
-		return err
-	}
-	seen, err := s.Store.Seen(r.Context(), id, u.ID)
-	if err != nil {
-		return httpx.Internal(err)
-	}
-	reaction, err := s.Store.MyReaction(r.Context(), id, u.ID)
-	if err != nil {
-		return httpx.Internal(err)
-	}
-	opts := presentOpts{viewer: u, seen: seen, myReaction: reaction}
-	if it.AuthorUserID == u.ID {
-		views, reacts, err := s.Store.Counts(r.Context(), id)
-		if err != nil {
-			return httpx.Internal(err)
+	if u := caller(r); u != nil {
+		if u.Active() {
+			it, err := s.storyForCaller(r, u, id)
+			if err != nil {
+				return err
+			}
+			seen, err := s.Store.Seen(r.Context(), id, u.ID)
+			if err != nil {
+				return httpx.Internal(err)
+			}
+			reaction, err := s.Store.MyReaction(r.Context(), id, u.ID)
+			if err != nil {
+				return httpx.Internal(err)
+			}
+			opts := presentOpts{viewer: u, seen: seen, myReaction: reaction}
+			if it.AuthorUserID == u.ID {
+				views, reacts, err := s.Store.Counts(r.Context(), id)
+				if err != nil {
+					return httpx.Internal(err)
+				}
+				if anon, err := s.Store.AnonymousViewCount(r.Context(), id); err == nil {
+					views += anon
+				}
+				opts.views, opts.reactions = &views, &reacts
+			}
+			httpx.WriteJSON(w, http.StatusOK, presentStory(it, opts))
+			return nil
 		}
-		opts.views, opts.reactions = &views, &reacts
 	}
-	httpx.WriteJSON(w, http.StatusOK, presentStory(it, opts))
+	// Anonymous caller: only a live public Story is visible. Anything else
+	// is the same 404 an unauthorized signed-in caller would get.
+	it, err := s.Store.PublicStory(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return httpx.NotFound()
+		}
+		return httpx.Internal(err)
+	}
+	httpx.WriteJSON(w, http.StatusOK, presentStory(it, presentOpts{}))
 	return nil
 }
 
@@ -195,14 +209,24 @@ func (s *Server) getViewers(w http.ResponseWriter, r *http.Request) error {
 // The view itself is recorded by the media gateway when content-bearing bytes
 // are delivered. This endpoint cannot create a view for an unauthorized
 // caller, because it resolves the Story through the same predicate first.
+// Anonymous callers may acknowledge a public Story; it is a no-op 204 and
+// stores nothing, per the launch privacy decision (count anonymous delivery
+// only, retain no per-viewer or IP record).
 func (s *Server) postView(w http.ResponseWriter, r *http.Request) error {
-	u, err := mustCaller(r)
-	if err != nil {
-		return err
-	}
 	id, err := pathUUID(r, "storyId")
 	if err != nil {
 		return err
+	}
+	u := caller(r)
+	if u == nil {
+		if _, err := s.Store.PublicStory(r.Context(), id); err != nil {
+			return httpx.NotFound()
+		}
+		httpx.NoContent(w)
+		return nil
+	}
+	if !u.Active() {
+		return httpx.Forbidden("This account is suspended.")
 	}
 	it, err := s.Store.StoryForViewer(r.Context(), u.ID, u.GitHubID, id)
 	if err != nil {

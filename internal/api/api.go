@@ -52,8 +52,19 @@ type AuthService interface {
 	ApprovePendingLogin(ctx context.Context, pendingID, userID uuid.UUID, userCode string) error
 	DenyPendingLogin(ctx context.Context, pendingID uuid.UUID) error
 	Poll(ctx context.Context, pendingID uuid.UUID, pollingSecret string) (*store.PollResult, error)
+	StartDeviceLogin(ctx context.Context, kind domain.ClientKind, label string) (*DeviceLoginStart, error)
+	PollDeviceLogin(ctx context.Context, id uuid.UUID) (*store.PollResult, error)
 	ImportFollows(ctx context.Context, userID uuid.UUID, upstreamToken string, enabled, preview bool) (*ImportSummary, error)
 	Configured() bool
+}
+
+// DeviceLoginStart is a GitHub Device Authorization Grant request.
+type DeviceLoginStart struct {
+	ID              uuid.UUID
+	UserCode        string
+	VerificationURI string
+	ExpiresAt       time.Time
+	IntervalSeconds int
 }
 
 // AuthResult is the outcome of a completed OAuth authorization.

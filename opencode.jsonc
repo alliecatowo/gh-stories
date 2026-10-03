@@ -1,0 +1,57 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Primary orchestrator: free Zen model. Cheap-strong DevPass fallback below.
+  "model": "opencode/muse-spark-1.3-contributor-free",
+  // Lightweight tasks (titles, summaries): cheapest OpenAI tier.
+  "small_model": "openai/gpt-5.6-luna",
+  // Per-agent fallback chains are handled by this plugin (native opencode has
+  // no `fallbacks` field). Each agent below defines its own `fallback_models`.
+  // Docs: https://github.com/Agent-Pattern-Labs/opencode-model-fallback
+  "plugin": ["@razroo/opencode-model-fallback"],
+  // Auto-loaded anyway; listed here so the chain is obvious.
+  "instructions": ["AGENTS.md"],
+  // Fallback: one model for everything. Muse Spark 1.3 Contributor on DevPass
+  // ($0.10 in / $0.20 out per 1M, 1M context, tools + reasoning) is the same
+  // weights as the paid tier, discounted in exchange for training rights —
+  // nothing else touches that price/performance (DeepSeek V4 Flash is cheaper
+  // raw at $0.05/$0.10 but a weaker agentic tier; SCX promo picks expire
+  // Sep 24 and can't be pinned from here anyway). Zen primary needs no keys.
+  // Agents below define their own `fallback_models`.
+  "agent": {
+    // Main build/orchestrator agent. Tweak model + fallback_models here.
+    "build": {
+      "description": "Default development agent. Delegates to swift/forge/auditor for specialized work.",
+      "mode": "primary",
+      "model": "opencode/muse-spark-1.3-contributor-free",
+      "fallback_models": ["llmgateway/muse-spark-1.3-contributor"]
+    },
+    // LOW worker: triage, classification, small scoped edits, fast searches.
+    "swift": {
+      "description": "Cheap fast worker. Use for triage, simple edits, repetitive transforms, quick codebase questions.",
+      "mode": "subagent",
+      "model": "openai/gpt-5.6-luna",
+      "reasoningEffort": "minimal",
+      "fallback_models": ["llmgateway/muse-spark-1.3-contributor"],
+      "prompt": "You are swift, the cheapest worker. Prefer small, scoped changes. Follow AGENTS.md. Run `mise run check` for anything you touch when feasible. Escalate to forge when a task spans subsystems or needs multi-step reasoning."
+    },
+    // MEDIUM worker: everyday feature work, multi-file changes, debugging.
+    "forge": {
+      "description": "Default-strength worker. Use for feature work, multi-file changes, debugging, and anything swift cannot finish.",
+      "mode": "subagent",
+      "model": "openai/gpt-5.6-terra",
+      "reasoningEffort": "medium",
+      "fallback_models": ["llmgateway/muse-spark-1.3-contributor"],
+      "prompt": "You are forge, the standard development worker. Follow AGENTS.md. Keep changes minimal and covered by existing checks (`mise run check`, `mise run test`). Escalate to auditor for security-sensitive code, auth, or complex cross-cutting changes."
+    },
+    // HIGH worker: security review, complex debugging, architecture. Also the on-call help agent.
+    "auditor": {
+      "description": "Strongest reviewer. Use for security audits, auth/privacy code, complex debugging, architecture decisions, and second opinions.",
+      "mode": "subagent",
+      "model": "openai/gpt-5.6-sol",
+      "permission": { "edit": "deny" },
+      "reasoningEffort": "max",
+      "fallback_models": ["llmgateway/muse-spark-1.3-contributor"],
+      "prompt": "You are auditor, the senior reviewer. You are read-only: never edit files, only report findings with file:line references. Focus on security (auth, input validation, data exposure), correctness, and contract drift (openapi.yaml vs router). Be specific and cite evidence."
+    }
+  }
+}

@@ -60,9 +60,22 @@ func TestExternal_Render_DerivesMetaFromImageBounds(t *testing.T) {
 	e := &External{}
 	img := image.NewRGBA(image.Rect(0, 0, 200, 100))
 	var buf bytes.Buffer
-	require.NoError(t, e.Render(&buf, 0, img, Placement{WidthCells: 40, HeightCells: 8}, Capabilities{}))
+	t.Setenv("TERM", "dumb")
+	require.NoError(t, e.Render(&buf, 0, img,
+		Placement{WidthCells: 40, HeightCells: 8}, Capabilities{}))
 	assert.Contains(t, buf.String(), "200")
 	assert.Contains(t, buf.String(), "100")
+}
+
+func TestExternal_Render_ArtWhenColorAvailable(t *testing.T) {
+	e := &External{}
+	img := image.NewRGBA(image.Rect(0, 0, 200, 100))
+	var buf bytes.Buffer
+	require.NoError(t, e.Render(&buf, 0, img,
+		Placement{WidthCells: 40, HeightCells: 8},
+		Capabilities{TruecolorOK: true}))
+	assert.Contains(t, buf.String(), "▀", "colored terminal gets art, not a box")
+	assert.NotContains(t, buf.String(), "┌")
 }
 
 func TestExternal_SupportedAlwaysTrue(t *testing.T) {

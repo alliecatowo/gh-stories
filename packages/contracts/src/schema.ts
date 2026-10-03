@@ -254,6 +254,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/device/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a GitHub Device Authorization Grant login */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        client_kind: "cli" | "browser_extension";
+                        /** @description Human label shown in the session list, e.g. 'gh stories on allies-mbp' */
+                        client_label?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Device authorization created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DeviceLogin"];
+                    };
+                };
+                429: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/device/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Poll a device authorization (bounded, rate limited, single use) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        device_login_id: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Current authorization state; token present exactly once on approval */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DeviceLoginPoll"];
+                    };
+                };
+                404: components["responses"]["Error"];
+                429: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/logout": {
         parameters: {
             query?: never;
@@ -735,7 +826,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read one Story item the caller is authorized to see */
+        /**
+         * Read one Story item
+         * @description Signed-in callers resolve through the full audience predicate; anonymous
+         *     callers may read a live public Story only. Anything else is 404.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -909,7 +1004,8 @@ export interface paths {
          * @description A view is recorded by the media authorization gateway when content-bearing
          *     media is delivered to an authorized non-owner. This endpoint records the
          *     client's separate rendering acknowledgement; it never creates a view for
-         *     an unauthorized caller.
+         *     an unauthorized caller. Anonymous callers may acknowledge a live public
+         *     Story; it is a no-op 204 that stores nothing.
          */
         post: {
             parameters: {
@@ -1147,11 +1243,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Authorization gateway for private media
+         * Authorization gateway for media (public Stories readable anonymously)
          * @description Checks session, audience, block, hide, suspension, deletion and expiry on
          *     every request including thumbnails and video range requests. Supports
          *     HTTP range. Delivering content-bearing media to an authorized non-owner
-         *     records a view. There are no public or long-lived media URLs.
+         *     records a view. Anonymous callers may fetch a live public Story's media;
+         *     it is served with short public caching and increments an aggregate
+         *     anonymous counter only — no per-viewer row, no IP history. There are no
+         *     public or long-lived object URLs.
          */
         get: {
             parameters: {
@@ -1995,7 +2094,7 @@ export interface components {
          *     author_follows      — My followers (signed-in users who follow the author)
          *     mutuals             — Mutuals
          *     custom_list         — Custom list
-         *     public              — Public, anyone signed in
+         *     public              — Public, anyone, no sign-in required
          * @enum {string}
          */
         Visibility: "followers_of_author" | "author_follows" | "mutuals" | "custom_list" | "public";
@@ -2055,6 +2154,24 @@ export interface components {
             token?: string;
             /** Format: date-time */
             expires_at?: string;
+            user?: components["schemas"]["PublicUser"];
+        };
+        DeviceLogin: {
+            /** Format: uuid */
+            device_login_id: string;
+            /** @description Short code the user matches on github.com */
+            user_code: string;
+            /** @description GitHub URL the user opens to authorize */
+            verification_uri: string;
+            /** Format: date-time */
+            expires_at: string;
+            interval_seconds: number;
+        };
+        DeviceLoginPoll: {
+            /** @enum {string} */
+            status: "pending" | "slow_down" | "approved" | "denied" | "expired";
+            /** @description Present exactly once */
+            token?: string;
             user?: components["schemas"]["PublicUser"];
         };
         ImportSummary: {

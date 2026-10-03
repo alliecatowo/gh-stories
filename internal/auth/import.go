@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+
+	"github.com/alliecatowo/gh-stories/internal/domain"
 )
 
 // maxImportFollows bounds how many followed accounts a single import will
@@ -14,11 +16,18 @@ const maxImportFollows = 5000
 // ImportSummary tallies what a follow import did, mirroring the
 // store.ImportChange actions.
 type ImportSummary struct {
-	Added             int
-	AlreadyFollowing  int
-	SkippedUnfollowed int
-	SkippedBlocked    int
+	GitHubFollowingCount int
+	Added                int
+	AlreadyFollowing     int
+	SkippedUnfollowed    int
+	SkippedBlocked       int
+	// Sample is a handful of the accounts newly followed, so the summary can
+	// say "you now follow maya, jules and 12 others" rather than a bare count.
+	Sample []domain.Identity
 }
+
+// sampleSize bounds how many names an import summary names out loud.
+const sampleSize = 5
 
 // ImportFollows fetches who the user follows on GitHub and hands the
 // deduplicated set to the store. Opt-out: the caller decides `enabled` —
@@ -44,8 +53,11 @@ func (s *Service) ImportFollows(ctx context.Context, userID uuid.UUID, upstreamT
 		return nil, err
 	}
 
-	summary := &ImportSummary{}
+	summary := &ImportSummary{GitHubFollowingCount: len(identities)}
 	for _, c := range changes {
+		if c.Action == "added" && len(summary.Sample) < sampleSize {
+			summary.Sample = append(summary.Sample, c.Identity)
+		}
 		switch c.Action {
 		case "added":
 			summary.Added++
