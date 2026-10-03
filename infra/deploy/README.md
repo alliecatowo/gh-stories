@@ -73,11 +73,13 @@ gcloud run jobs add-iam-policy-binding gh-stories-worker \
 
 ## 1. State and media (operator, Neon + Cloudflare dashboards)
 
-1. Create a Neon project and production branch; store its pooled Postgres
-   URL as `ghs-production-database-url` in Secret Manager. The code works
-   through PgBouncer (the pooled `-pooler` host) because it uses unnamed
-   statements; the direct host also works. Neon's free tier suspends compute
-   after 5 idle minutes, so keep the worker bounded (see worker-job.yaml).
+1. Create a Neon project and production branch; store its **direct**
+   (non-`-pooler`) Postgres URL as `ghs-production-database-url` in Secret
+   Manager. The pooled `-pooler` host (PgBouncer transaction mode) does not
+   work: pgx's describe-then-execute splits across backends and fails with
+   "unnamed prepared statement does not exist". Neon's free tier suspends
+   compute after 5 idle minutes, so keep the worker bounded (see
+   worker-job.yaml).
 2. Create one **private** R2 bucket (e.g. `gh-stories-media`).
 3. Create a narrowly scoped R2 token (this bucket, read/write only) and store
    its key id/secret as `ghs-production-r2-access-key-id` /
