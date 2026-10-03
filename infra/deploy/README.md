@@ -47,11 +47,11 @@ for sa in gh-stories-api gh-stories-worker gh-stories-scheduler gh-stories-deplo
   gcloud iam service-accounts create "$sa" --project="$GHS_GCP_PROJECT"
 done
 # API/worker read their own secrets only:
-# (the worker needs only the first four; the API also needs the GitHub pair)
+# (both need the GitHub pair: production config validation requires it)
 for sa in gh-stories-api gh-stories-worker; do
   secrets="ghs-production-database-url ghs-production-r2-access-key-id \
-      ghs-production-r2-secret-access-key ghs-production-secret-key"
-  [ "$sa" = gh-stories-api ] && secrets="$secrets ghs-production-github-client-id ghs-production-github-client-secret"
+      ghs-production-r2-secret-access-key ghs-production-secret-key \
+      ghs-production-github-client-id ghs-production-github-client-secret"
   for secret in $secrets; do
     gcloud secrets add-iam-policy-binding "$secret" --project="$GHS_GCP_PROJECT" \
       --member="serviceAccount:${sa}@${GHS_GCP_PROJECT}.iam.gserviceaccount.com" \
