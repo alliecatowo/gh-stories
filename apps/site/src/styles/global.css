@@ -221,12 +221,12 @@ pre {
 }
 
 .btn--primary {
-  background: linear-gradient(135deg, var(--ghs-ring-unseen-start), var(--ghs-ring-unseen-end));
+  background: #7c4dcc;
   color: #fff;
 }
 
 .btn--primary:hover {
-  filter: brightness(1.05);
+  background: #6d3fbd;
 }
 
 .btn--secondary {

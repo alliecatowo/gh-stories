@@ -33,9 +33,9 @@
   --ghs-overlay-backdrop: rgba(140, 149, 159, 0.5);
   --ghs-shadow-overlay: 0 8px 24px rgba(140, 149, 159, 0.2);
 
-  /* The one distinctive mark: a warm magenta -> amber ring. */
-  --ghs-ring-unseen-start: #e5486f;
-  --ghs-ring-unseen-end: #f0883e;
+  /* The one distinctive mark: a pink -> purple ring. */
+  --ghs-ring-unseen-start: #e254a8;
+  --ghs-ring-unseen-end: #8f6ae8;
   --ghs-ring-seen: #d1d9e0;
   --ghs-ring-muted: #8c959f;
 

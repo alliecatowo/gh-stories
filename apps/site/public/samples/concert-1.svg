@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" role="img" aria-label="Illustrated concert scene: a silhouetted crowd faces a stage under magenta and amber lights.">
   <defs>
     <radialGradient id="glowA" cx="30%" cy="20%" r="55%">
-      <stop offset="0%" stop-color="#e5486f" stop-opacity="0.9"/>
-      <stop offset="100%" stop-color="#e5486f" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#e254a8" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#e254a8" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="glowB" cx="75%" cy="15%" r="55%">
-      <stop offset="0%" stop-color="#f0883e" stop-opacity="0.85"/>
-      <stop offset="100%" stop-color="#f0883e" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#8f6ae8" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#8f6ae8" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <rect width="800" height="1000" fill="#0d1117"/>

@@ -68,7 +68,7 @@ const OVERLAY_CSS = `
   mask-composite: exclude;
 }
 .ghs-ring-overlay-root .ghs-story-ring__frame[data-state="unseen"] {
-  background-image: linear-gradient(135deg, var(--ghs-ring-unseen-start, #e5486f), var(--ghs-ring-unseen-end, #f0883e));
+  background-image: linear-gradient(135deg, var(--ghs-ring-unseen-start, #e254a8), var(--ghs-ring-unseen-end, #8f6ae8));
 }
 .ghs-ring-overlay-root .ghs-story-ring__frame[data-state="seen"] {
   background-image: linear-gradient(var(--ghs-ring-seen, #8c959f) 0 0);
@@ -89,7 +89,7 @@ const OVERLAY_CSS = `
   height: 13px;
   border-radius: 999px;
   border: 2px solid var(--ghs-canvas, #fff);
-  background: linear-gradient(135deg, var(--ghs-ring-unseen-start, #e5486f), var(--ghs-ring-unseen-end, #f0883e));
+  background: linear-gradient(135deg, var(--ghs-ring-unseen-start, #e254a8), var(--ghs-ring-unseen-end, #8f6ae8));
   padding: 0;
   cursor: pointer;
   pointer-events: auto;

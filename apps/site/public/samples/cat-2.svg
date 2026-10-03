@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" role="img" aria-label="Text card: 'the box is mine now.' on an amber to cream gradient.">
   <defs>
     <linearGradient id="cardGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f0883e"/>
+      <stop offset="0%" stop-color="#8f6ae8"/>
       <stop offset="100%" stop-color="#fbeee0"/>
     </linearGradient>
   </defs>
