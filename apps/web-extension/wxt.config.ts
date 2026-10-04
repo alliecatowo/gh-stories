@@ -14,7 +14,19 @@ declare const process: { env: Record<string, string | undefined> };
 // service URL is separately overridable from the options page; the rebuild is
 // only ever needed to WIDEN permissions, which is the conservative direction.
 // End-to-end tests build with a localhost origin for exactly this reason.
-const SERVICE_ORIGIN = process.env.GHS_SERVICE_ORIGIN ?? 'https://ghstories.fly.dev/*';
+//
+// One value drives everything: the manifest host permission AND the runtime
+// default (injected below as __GHS_SERVICE_ORIGIN__). It is the same Cloud Run
+// origin the release workflow passes to the CLI as GHS_DEFAULT_SERVICE_URL.
+const PRODUCTION_ORIGIN = 'https://gh-stories-api-706402477894.us-central1.run.app';
+const SERVICE_ORIGIN = new URL(
+  process.env.GHS_SERVICE_ORIGIN || process.env.GHS_DEFAULT_SERVICE_URL || PRODUCTION_ORIGIN,
+).origin;
+
+// Release builds export GHS_VERSION=<tag>; the manifest version must track it
+// (stores require a monotonic version). Local builds keep the package version.
+const MANIFEST_VERSION =
+  /^v?(\d+\.\d+\.\d+)/.exec(process.env.GHS_VERSION ?? '')?.[1] ?? '0.1.0';
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
@@ -24,17 +36,16 @@ export default defineConfig({
     name: 'GitHub Stories',
     description:
       'Stories for GitHub. Photos and videos on the avatars you already know, gone in 24 hours.',
-    version: '0.1.0',
+    version: MANIFEST_VERSION,
     // Only what is actually used:
     //   storage  – the session token and per-account caches, in local storage
     //              only (never sync, which would copy it across devices)
-    //   tabs     – opening the authorization tab and detecting its completion
     //   alarms   – an MV3 service worker is killed aggressively, so the
     //              bounded login poll needs an alarm to survive being evicted
     //              mid-login. Without this permission the worker throws during
     //              init and never registers its message listener at all.
-    permissions: ['storage', 'tabs', 'alarms'],
-    host_permissions: ['https://github.com/*', SERVICE_ORIGIN],
+    permissions: ['storage', 'alarms'],
+    host_permissions: ['https://github.com/*', `${SERVICE_ORIGIN}/*`],
     action: {
       default_title: 'GitHub Stories',
       default_popup: 'popup.html',
@@ -63,5 +74,6 @@ export default defineConfig({
   }),
   vite: () => ({
     build: { sourcemap: false },
+    define: { __GHS_SERVICE_ORIGIN__: JSON.stringify(SERVICE_ORIGIN) },
   }),
 });

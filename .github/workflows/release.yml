@@ -54,7 +54,9 @@ jobs:
           GHS_VERSION: ${{ github.ref_name }}
           # Release artifacts target the live service by default; a documented
           # explicit override supports self-hosting without a rebuild.
+          # The extension reads the same variable (host permission + default).
           GHS_DEFAULT_SERVICE_URL: ${{ vars.GHS_DEFAULT_SERVICE_URL }}
+          GHS_SERVICE_ORIGIN: ${{ vars.GHS_DEFAULT_SERVICE_URL }}
         run: mise run package
 
       - name: Attest build provenance
