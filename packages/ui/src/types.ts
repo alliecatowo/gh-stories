@@ -13,12 +13,6 @@ export interface AudienceOption {
   description: string;
 }
 
-export interface VideoEditParams {
-  startMs: number;
-  endMs: number;
-  muted: boolean;
-}
-
 /** What StoryComposer hands back to the host on submit. The host performs
  * the actual upload-intent + PUT + finalize sequence. */
 export interface ComposerDraft {
@@ -30,5 +24,4 @@ export interface ComposerDraft {
   audienceListId?: string;
   allowReplies: boolean;
   allowReactions: boolean;
-  videoEdit?: VideoEditParams;
 }

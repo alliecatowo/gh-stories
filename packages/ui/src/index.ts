@@ -8,4 +8,4 @@ export {
 export { StoryRow, type StoryRowProps, type StoryRowOwn } from "./StoryRow.js";
 export { Inbox, type InboxProps } from "./Inbox.js";
 export { SettingsPanel, type SettingsPanelProps } from "./SettingsPanel.js";
-export type { AudienceOption, ComposerDraft, VideoEditParams } from "./types.js";
+export type { AudienceOption, ComposerDraft } from "./types.js";

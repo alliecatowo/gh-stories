@@ -132,10 +132,6 @@ export function StoryComposer(props: StoryComposerProps): React.JSX.Element {
   const [aspect, setAspect] = useState<Aspect>("original");
   const [overlay, setOverlay] = useState<Overlay | null>(null);
 
-  const [durationMs, setDurationMs] = useState(0);
-  const [startMs, setStartMs] = useState(0);
-  const [endMs, setEndMs] = useState(0);
-  const [muted, setMuted] = useState(false);
 
   const [caption, setCaption] = useState("");
   const [altText, setAltText] = useState("");
@@ -236,7 +232,6 @@ export function StoryComposer(props: StoryComposerProps): React.JSX.Element {
         audienceListId: visibility === "custom_list" ? audienceListId : undefined,
         allowReplies,
         allowReactions,
-        videoEdit: kind === "video" ? { startMs, endMs: endMs || durationMs, muted } : undefined,
       };
       await onSubmit(draft);
       window.clearInterval(rampTimer);
@@ -316,12 +311,6 @@ export function StoryComposer(props: StoryComposerProps): React.JSX.Element {
                 src={objectUrl}
                 className="ghs-composer__media"
                 controls
-                muted={muted}
-                onLoadedMetadata={(event) => {
-                  const d = Math.round(event.currentTarget.duration * 1000);
-                  setDurationMs(d);
-                  setEndMs(d);
-                }}
               />
             )}
             {overlay ? (
@@ -388,32 +377,9 @@ export function StoryComposer(props: StoryComposerProps): React.JSX.Element {
               )}
             </div>
           ) : (
-            <div className="ghs-composer__tools">
-              <label className="ghs-composer__trim">
-                Start
-                <input
-                  type="range"
-                  min={0}
-                  max={durationMs}
-                  value={startMs}
-                  onChange={(event) => setStartMs(Math.min(Number(event.target.value), endMs))}
-                />
-              </label>
-              <label className="ghs-composer__trim">
-                End
-                <input
-                  type="range"
-                  min={0}
-                  max={durationMs}
-                  value={endMs}
-                  onChange={(event) => setEndMs(Math.max(Number(event.target.value), startMs))}
-                />
-              </label>
-              <label className="ghs-composer__checkbox">
-                <input type="checkbox" checked={muted} onChange={(event) => setMuted(event.target.checked)} />
-                Mute
-              </label>
-            </div>
+            <p className="ghs-composer__note">
+              Videos are posted as they are, with their original length and sound.
+            </p>
           )}
 
           <label className="ghs-composer__field">

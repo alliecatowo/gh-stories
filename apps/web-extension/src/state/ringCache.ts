@@ -8,6 +8,7 @@
  */
 import type { RingStatus } from "@gh-stories/contracts";
 import type { ApiClient } from "../api/client.js";
+import { ApiClientError } from "../api/errors.js";
 
 const DEBOUNCE_MS = 120;
 const MAX_IDS_PER_BATCH = 100;
@@ -65,6 +66,9 @@ interface Waiter {
   ids: number[];
   logins: string[];
   resolve: (entries: RingStatus[]) => void;
+  /** Rejected (rather than resolved with a short list) when the lookup was
+   * cancelled or failed, so callers can tell "no Story" from "don't know". */
+  reject: (error: unknown) => void;
 }
 
 class TabRingBatcher {
@@ -80,10 +84,10 @@ class TabRingBatcher {
   ) {}
 
   enqueue(ids: number[], logins: string[]): Promise<RingStatus[]> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       for (const id of ids) this.queueIds.add(id);
       for (const login of logins) this.queueLogins.add(login);
-      this.waiters.push({ ids, logins, resolve });
+      this.waiters.push({ ids, logins, resolve, reject });
       if (this.queueIds.size >= MAX_IDS_PER_BATCH || this.queueLogins.size >= MAX_LOGINS_PER_BATCH) {
         this.flushSoon(0);
       } else {
@@ -93,8 +97,9 @@ class TabRingBatcher {
   }
 
   /** Aborts any in-flight upstream call and drops queued-but-unsent work.
-   * Waiters are resolved with an empty result rather than left hanging, so
-   * a navigating page's pending scan promise still settles. */
+   * Waiters are rejected with a `cancelled` error (not resolved empty, which
+   * would read as "nobody has a Story"), so a navigating page's pending scan
+   * settles and knows to ask again. */
   cancel(): void {
     this.controller?.abort();
     this.controller = null;
@@ -105,7 +110,9 @@ class TabRingBatcher {
     this.queueIds.clear();
     this.queueLogins.clear();
     const waiters = this.waiters.splice(0);
-    for (const waiter of waiters) waiter.resolve([]);
+    for (const waiter of waiters) {
+      waiter.reject(new ApiClientError({ code: "cancelled", message: "Request cancelled." }));
+    }
   }
 
   private flushSoon(delayMs: number): void {
@@ -125,6 +132,7 @@ class TabRingBatcher {
     const idsToFetch: number[] = [];
     const loginsToFetch: string[] = [];
     const results = new Map<string, RingStatus>();
+    let failure: unknown;
 
     if (!accountId) {
       // Signed out: no authorized ring data exists to show.
@@ -168,10 +176,12 @@ class TabRingBatcher {
             results.set(key, negative);
           }
         }
-      } catch {
+      } catch (error) {
         // Network/timeout/cancellation: leave unresolved entries out of the
-        // result map; waiters simply receive whatever was cached, so a
-        // flaky connection never surfaces a broken UI, only a quiet one.
+        // result map. Waiters that needed them are rejected below, so the
+        // page retries instead of caching "no Story" for people it never
+        // actually heard about.
+        failure = error;
       } finally {
         this.controller = null;
       }
@@ -185,15 +195,19 @@ class TabRingBatcher {
 
     for (const waiter of waiters) {
       const entries: RingStatus[] = [];
+      let missing = false;
       for (const id of waiter.ids) {
         const found = results.get(idKey(accountId, id));
         if (found) entries.push(found);
+        else if (failure !== undefined) missing = true;
       }
       for (const login of waiter.logins) {
         const found = results.get(loginKey(accountId, login));
         if (found && !entries.includes(found)) entries.push(found);
+        else if (!found && failure !== undefined) missing = true;
       }
-      waiter.resolve(entries);
+      if (missing) waiter.reject(failure);
+      else waiter.resolve(entries);
     }
   }
 }

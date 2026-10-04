@@ -81,7 +81,10 @@ export default defineBackground(() => {
     const targetId = accountId ?? (await getActiveAccountId());
     if (!targetId) return;
     try {
-      await apiClient.logout();
+      // Revoke the session of the account actually being removed, which is
+      // not necessarily the active one.
+      const account = (await getAccounts())[targetId];
+      if (account) await apiClient.logoutToken(account.token);
     } catch {
       // Revoke server-side on a best-effort basis; the local token is
       // dropped regardless so the extension always reflects "signed out"
@@ -193,6 +196,8 @@ export default defineBackground(() => {
           return { ok: true, data: await apiClient.viewers(message.storyId) };
         case "ghs:story/view":
           await apiClient.acknowledgeView(message.storyId);
+          // Ring state (seen vs unseen) just changed; do not serve the old one.
+          clearAllRingCache();
           return { ok: true, data: { acknowledged: true } };
         case "ghs:story/react": {
           // A random per-attempt key: never user content (emoji or reply text
@@ -262,10 +267,12 @@ export default defineBackground(() => {
           return { ok: true, data: { revoked: true } };
         case "ghs:settings/sign-out-all": {
           const accounts = await getAccounts();
+          // Revoke every stored account's own session server-side, not just
+          // the active one; local state is cleared regardless.
+          await Promise.allSettled(Object.values(accounts).map((account) => apiClient.logoutToken(account.token)));
           for (const account of Object.values(accounts)) {
             purgeAccountRingCache(account.accountId);
           }
-          await apiClient.logout().catch(() => undefined);
           await clearAllAccounts();
           clearAllRingCache();
           return { ok: true, data: { signedOut: true } };
@@ -299,7 +306,16 @@ export default defineBackground(() => {
     (message: unknown, sender: Browser.runtime.MessageSender, sendResponse: (response: RuntimeResponse) => void) => {
       const kind = senderKind(sender, browser.runtime.id, ownOrigin());
       if (!kind) return undefined;
-      if (!isRuntimeRequest(message)) return undefined;
+      if (!isRuntimeRequest(message)) {
+        // A malformed request for one of OUR message types gets an error back
+        // (instead of silence, which the caller sees as no_response); anything
+        // else is not ours and is left for other listeners.
+        const type = (message as { type?: unknown } | null)?.type;
+        if (typeof type === "string" && type.startsWith("ghs:")) {
+          sendResponse({ ok: false, error: { code: "invalid_request", message: "That request was not valid." } });
+        }
+        return undefined;
+      }
       if (!isMessageAllowed(message, kind)) {
         sendResponse({ ok: false, error: { code: "forbidden", message: "Not allowed from this context." } });
         return undefined;

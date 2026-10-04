@@ -20,10 +20,10 @@ export class OverlayHost {
   private readonly stopTheme: () => void;
   private mode: Mode = { kind: "closed" };
 
-  constructor() {
+  constructor(private readonly onClosed?: () => void) {
     this.mount = createShadowMount({ tagName: "ghs-overlay-host" });
     this.mount.host.style.cssText = "position: fixed; inset: 0; z-index: 2147483647; display: none;";
-    document.body.appendChild(this.mount.host);
+    this.attach();
     this.stopTheme = observeGithubTheme(this.mount.host);
     this.root = createRoot(this.mount.container);
   }
@@ -48,6 +48,7 @@ export class OverlayHost {
     this.mode = { kind: "closed" };
     this.mount.host.style.display = "none";
     this.root.render(null);
+    this.onClosed?.();
   }
 
   destroy(): void {
@@ -56,7 +57,16 @@ export class OverlayHost {
     this.mount.destroy();
   }
 
+  /** Turbo Drive swaps the whole <body>, which would take a host appended to
+   * it along; <html> survives. Re-run before every show in case anything
+   * detached it anyway. */
+  attach(): void {
+    if (this.mount.host.isConnected) return;
+    (document.documentElement ?? document.body).appendChild(this.mount.host);
+  }
+
   private show(): void {
+    this.attach();
     this.mount.host.style.display = "block";
     this.render();
   }

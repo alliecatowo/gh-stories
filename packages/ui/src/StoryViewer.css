@@ -343,3 +343,12 @@
   cursor: pointer;
   padding: var(--ghs-space-1) var(--ghs-space-2);
 }
+
+.ghs-viewer__action-error {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #fff;
+  background: rgba(207, 34, 46, 0.85);
+}

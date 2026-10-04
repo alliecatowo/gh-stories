@@ -22,6 +22,8 @@ function Affordance(props: { login: string; overlay: OverlayHost }): React.JSX.E
   const [following, setFollowing] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [isSelf, setIsSelf] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +33,10 @@ function Affordance(props: { login: string; overlay: OverlayHost }): React.JSX.E
     ]).then(([session, ring]) => {
       if (cancelled) return;
       setSignedIn(session.ok && session.data.signedIn);
-      if (ring.ok && ring.data.entries[0]) setHasStory(ring.data.entries[0].has_active);
+      if (ring.ok && ring.data.entries[0]) {
+        setHasStory(ring.data.entries[0].has_active);
+        setIsSelf(ring.data.entries[0].is_self === true);
+      }
     });
     return () => {
       cancelled = true;
@@ -47,21 +52,30 @@ function Affordance(props: { login: string; overlay: OverlayHost }): React.JSX.E
           View Story
         </button>
       ) : null}
-      <button
-        type="button"
-        className="ghs-profile-affordance__follow"
-        disabled={busy}
-        aria-pressed={following}
-        onClick={async () => {
-          setBusy(true);
-          const action = following ? "unfollow" : "follow";
-          const result = await callBackground({ type: "ghs:graph/action", action, login });
-          if (result.ok) setFollowing(action === "follow");
-          setBusy(false);
-        }}
-      >
-        {following ? "Following on Stories" : "Follow on Stories"}
-      </button>
+      {isSelf ? null : (
+        <button
+          type="button"
+          className="ghs-profile-affordance__follow"
+          disabled={busy}
+          aria-pressed={following}
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            const action = following ? "unfollow" : "follow";
+            const result = await callBackground({ type: "ghs:graph/action", action, login });
+            if (result.ok) setFollowing(action === "follow");
+            else setError(result.error.message);
+            setBusy(false);
+          }}
+        >
+          {following ? "Following on Stories" : "Follow on Stories"}
+        </button>
+      )}
+      {error ? (
+        <span className="ghs-profile-affordance__error" role="alert">
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }
