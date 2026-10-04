@@ -4,35 +4,35 @@ import { withBase } from '../lib/base';
 const REPO = 'https://github.com/alliecatowo/gh-stories';
 ---
 
-<footer class="site-footer">
-  <div class="wrap">
-    <div class="site-footer__grid">
+<footer class="mt-8 border-t border-border bg-muted/50">
+  <div class="wrap py-12">
+    <div class="grid gap-8 sm:grid-cols-3">
       <div>
-        <h2>Project</h2>
-        <ul>
-          <li><a href={REPO}>Source</a></li>
-          <li><a href={`${REPO}/releases`}>Releases</a></li>
-          <li><a href={`${REPO}/issues`}>Issues</a></li>
+        <h2 class="mb-3 font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground">Project</h2>
+        <ul class="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+          <li><a class="text-foreground no-underline hover:underline" href={REPO}>Source</a></li>
+          <li><a class="text-foreground no-underline hover:underline" href={`${REPO}/releases`}>Releases</a></li>
+          <li><a class="text-foreground no-underline hover:underline" href={`${REPO}/issues`}>Issues</a></li>
         </ul>
       </div>
       <div>
-        <h2>Docs</h2>
-        <ul>
-          <li><a href={withBase('/docs/install/')}>Install</a></li>
-          <li><a href={withBase('/docs/support/')}>Support matrix</a></li>
-          <li><a href={withBase('/docs/self-hosting/')}>Self-hosting</a></li>
+        <h2 class="mb-3 font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground">Docs</h2>
+        <ul class="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+          <li><a class="text-foreground no-underline hover:underline" href={withBase('/docs/install/')}>Install</a></li>
+          <li><a class="text-foreground no-underline hover:underline" href={withBase('/docs/support/')}>Support matrix</a></li>
+          <li><a class="text-foreground no-underline hover:underline" href={withBase('/docs/self-hosting/')}>Self-hosting</a></li>
         </ul>
       </div>
       <div>
-        <h2>Trust</h2>
-        <ul>
-          <li><a href={withBase('/docs/privacy/')}>Privacy &amp; retention</a></li>
-          <li><a href={`${REPO}/blob/main/SECURITY.md`}>Security policy</a></li>
-          <li><a href={`${REPO}/blob/main/LICENSE`}>License (MIT)</a></li>
+        <h2 class="mb-3 font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground">Trust</h2>
+        <ul class="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+          <li><a class="text-foreground no-underline hover:underline" href={withBase('/docs/privacy/')}>Privacy &amp; retention</a></li>
+          <li><a class="text-foreground no-underline hover:underline" href={`${REPO}/blob/main/SECURITY.md`}>Security policy</a></li>
+          <li><a class="text-foreground no-underline hover:underline" href={`${REPO}/blob/main/LICENSE`}>License (MIT)</a></li>
         </ul>
       </div>
     </div>
-    <p class="site-footer__disclaimer">
+    <p class="mt-10 max-w-prose text-xs leading-relaxed text-muted-foreground">
       GitHub Stories is an independent project. It is not affiliated with, endorsed by, or
       sponsored by GitHub, GitHub Inc., or Microsoft.
     </p>

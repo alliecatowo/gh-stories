@@ -1,3 +1,126 @@
+/* GitHub Stories site: Tailwind v4 (theme + utilities only, no preflight, so the
+ * docs/demo pages keep their element defaults) with shadcn/ui-style tokens
+ * driven by the Rose Pine palette. <body class="ghs-root site"> still carries
+ * @gh-stories/ui's tokens, which the sample demo's real components read. */
+@layer theme, base, legacy, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/jetbrains-mono";
+
+@theme inline {
+  --font-sans: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-background: var(--ghs-canvas);
+  --color-foreground: var(--ghs-fg-default);
+  --color-card: var(--ghs-canvas-overlay);
+  --color-card-foreground: var(--ghs-fg-default);
+  --color-muted: var(--ghs-canvas-subtle);
+  --color-muted-foreground: var(--ghs-fg-muted);
+  --color-accent: var(--ghs-canvas-subtle);
+  --color-border: var(--ghs-border-default);
+  --color-ring: var(--ghs-accent-fg);
+  --color-primary: var(--ghs-primary);
+  --color-primary-foreground: var(--ghs-primary-fg);
+  --color-pink: var(--ghs-pink);
+  --color-foam: var(--ghs-foam);
+  --color-terminal: var(--ghs-terminal);
+  --color-terminal-foreground: var(--ghs-terminal-fg);
+  --color-terminal-accent: var(--ghs-terminal-accent);
+}
+
+/* Rose Pine: Dawn (light) and Moon (dark). Selectors are deliberately more
+ * specific than @gh-stories/ui's theme.css so they win in every color-mode case. */
+html body.site.ghs-root {
+  --ghs-canvas: #faf4ed;
+  --ghs-canvas-subtle: #f2e9e1;
+  --ghs-canvas-overlay: #fffaf3;
+  --ghs-border-default: #d9cfc8;
+  --ghs-border-muted: #e6dcd4;
+  --ghs-fg-default: #3f3a5e;
+  --ghs-fg-muted: #625e7a;
+  --ghs-accent-fg: #6b4fa3;
+  --ghs-accent-emphasis: #6b4fa3;
+  --ghs-danger-fg: #a8445f;
+  --ghs-success-fg: #286983;
+  --ghs-primary: #6b4fa3;
+  --ghs-primary-hover: #5b4090;
+  --ghs-primary-fg: #fffaf3;
+  --ghs-pink: #c0407f;
+  --ghs-foam: #2f7684;
+  --ghs-terminal: #232136;
+  --ghs-terminal-fg: #e0def4;
+  --ghs-terminal-accent: #eb6f92;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-color-mode="light"]) body.site.ghs-root {
+    --ghs-canvas: #232136;
+    --ghs-canvas-subtle: #2a273f;
+    --ghs-canvas-overlay: #2a283e;
+    --ghs-border-default: #4a4668;
+    --ghs-border-muted: #393552;
+    --ghs-fg-default: #e0def4;
+    --ghs-fg-muted: #a8a4c4;
+    --ghs-accent-fg: #c4a7e7;
+    --ghs-accent-emphasis: #c4a7e7;
+    --ghs-danger-fg: #eb6f92;
+    --ghs-success-fg: #9ccfd8;
+    --ghs-primary: #c4a7e7;
+    --ghs-primary-hover: #d3bcf0;
+    --ghs-primary-fg: #232136;
+    --ghs-pink: #eb6f92;
+    --ghs-foam: #9ccfd8;
+    --ghs-terminal: #191724;
+    --ghs-terminal-fg: #e0def4;
+    --ghs-terminal-accent: #eb6f92;
+}
+}
+html[data-color-mode="dark"] body.site.ghs-root {
+  --ghs-canvas: #232136;
+  --ghs-canvas-subtle: #2a273f;
+  --ghs-canvas-overlay: #2a283e;
+  --ghs-border-default: #4a4668;
+  --ghs-border-muted: #393552;
+  --ghs-fg-default: #e0def4;
+  --ghs-fg-muted: #a8a4c4;
+  --ghs-accent-fg: #c4a7e7;
+  --ghs-accent-emphasis: #c4a7e7;
+  --ghs-danger-fg: #eb6f92;
+  --ghs-success-fg: #9ccfd8;
+  --ghs-primary: #c4a7e7;
+  --ghs-primary-hover: #d3bcf0;
+  --ghs-primary-fg: #232136;
+  --ghs-pink: #eb6f92;
+  --ghs-foam: #9ccfd8;
+  --ghs-terminal: #191724;
+  --ghs-terminal-fg: #e0def4;
+  --ghs-terminal-accent: #eb6f92;
+}
+
+
+@layer base {
+*, *::before, *::after { box-sizing: border-box; }
+
+
+/* The story ring: the product's one mark, reused as the site's motif. */
+.story-ring {
+  background: conic-gradient(from 210deg, #e254a8, #8f6ae8, #e254a8);
+  padding: 4px;
+  border-radius: 9999px;
+}
+.story-bars { display: grid; grid-auto-flow: column; gap: 6px; }
+.story-bars a { display: block; position: relative; padding-top: 14px; text-decoration: none; color: var(--ghs-fg-muted); font: 500 0.75rem/1 var(--font-mono); }
+.story-bars a::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; border-radius: 9999px; background: var(--ghs-border-default); transition: background 0.2s; }
+.story-bars a:hover::before, .story-bars a:focus-visible::before { background: linear-gradient(90deg, #e254a8, #8f6ae8); }
+.story-bars a:hover { color: var(--ghs-fg-default); }
+@media (prefers-reduced-motion: no-preference) {
+  .ring-spin { animation: ring-spin 24s linear infinite; }
+  @keyframes ring-spin { to { transform: rotate(360deg); } }
+}
+
+}
+
+@layer legacy {
 /* Site-wide layer, built on top of @gh-stories/ui's theme.css tokens.
  * <body> carries class="ghs-root", so every --ghs-* custom property,
  * the color-mode cascade, the focus-visible rule and the
@@ -103,79 +226,6 @@ pre {
 
 /* ---------------------------------------------------------------- header */
 
-.site-header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ghs-space-2) var(--ghs-space-4);
-  padding: var(--ghs-space-3) var(--ghs-space-4);
-  background: color-mix(in srgb, var(--ghs-canvas) 88%, transparent);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--ghs-border-muted);
-}
-
-.site-header__nav {
-  order: 3;
-  flex-basis: 100%;
-  justify-content: center;
-}
-
-@media (min-width: 860px) {
-  .site-header__nav {
-    order: 0;
-    flex-basis: auto;
-  }
-}
-
-.site-header__brand {
-  display: flex;
-  align-items: center;
-  gap: var(--ghs-space-2);
-  font-weight: 700;
-  font-size: 1rem;
-  text-decoration: none;
-  color: var(--ghs-fg-default);
-}
-
-.site-header__brand img {
-  width: 24px;
-  height: 24px;
-}
-
-.site-header__nav {
-  display: flex;
-  align-items: center;
-  gap: var(--ghs-space-4);
-  flex-wrap: wrap;
-}
-
-.site-header__nav a {
-  color: var(--ghs-fg-muted);
-  text-decoration: none;
-  font-size: var(--ghs-font-size-body);
-}
-
-.site-header__nav a:hover,
-.site-header__nav a[aria-current='page'] {
-  color: var(--ghs-fg-default);
-}
-
-.site-header__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--ghs-space-3);
-}
-
-@media (max-width: 640px) {
-  .site-header__nav-label {
-    display: none;
-  }
-}
-
 /* ---------------------------------------------------------------- theme toggle */
 
 .theme-toggle {
@@ -221,12 +271,12 @@ pre {
 }
 
 .btn--primary {
-  background: #7c4dcc;
-  color: #fff;
+  background: var(--ghs-primary);
+  color: var(--ghs-primary-fg);
 }
 
 .btn--primary:hover {
-  background: #6d3fbd;
+  background: var(--ghs-primary-hover);
 }
 
 .btn--secondary {
@@ -244,381 +294,17 @@ pre {
   font-size: var(--ghs-font-size-sm);
 }
 
-.btn-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--ghs-space-3);
-  align-items: flex-start;
-}
-
-.btn-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--ghs-space-1);
-}
-
-.btn-note {
-  font-size: var(--ghs-font-size-sm);
-  color: var(--ghs-fg-muted);
-  max-width: 32ch;
-}
-
 /* ---------------------------------------------------------------- hero */
-
-.hero {
-  padding-block: var(--ghs-space-6) calc(var(--ghs-space-6) * 1.5);
-}
-
-.hero__kicker {
-  display: inline-block;
-  font-size: var(--ghs-font-size-sm);
-  color: var(--ghs-fg-muted);
-  border: 1px solid var(--ghs-border-default);
-  border-radius: var(--ghs-radius-full);
-  padding: var(--ghs-space-1) var(--ghs-space-3);
-  margin-bottom: var(--ghs-space-4);
-}
-
-.hero h1 {
-  font-size: clamp(2.25rem, 6vw, 3.5rem);
-  line-height: 1.05;
-  margin: 0 0 var(--ghs-space-3);
-  letter-spacing: -0.02em;
-}
-
-.hero__tagline {
-  font-size: clamp(1.1rem, 2.4vw, 1.375rem);
-  color: var(--ghs-fg-default);
-  margin: 0 0 var(--ghs-space-3);
-  font-weight: 600;
-}
-
-.hero__lede {
-  color: var(--ghs-fg-muted);
-  max-width: 62ch;
-  font-size: 1.0625rem;
-  margin: 0 0 var(--ghs-space-5);
-}
-
-.hero__ctas {
-  margin-bottom: calc(var(--ghs-space-6) * 1.25);
-}
 
 /* ---------------------------------------------------------------- hero demo mock */
 
-.hero-demo {
-  display: block;
-  text-decoration: none;
-  color: inherit;
-  border-radius: var(--ghs-radius-lg);
-}
-
-.hero-demo__label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--ghs-space-2);
-  margin-bottom: var(--ghs-space-3);
-  font-size: var(--ghs-font-size-sm);
-  color: var(--ghs-fg-muted);
-}
-
-.hero-demo__cta {
-  font-weight: 600;
-  color: var(--ghs-accent-fg);
-}
-
-.hero-demo__panels {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--ghs-space-4);
-  padding: var(--ghs-space-4);
-  border-radius: var(--ghs-radius-lg);
-  border: 1px solid var(--ghs-border-default);
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--ghs-ring-unseen-start) 6%, var(--ghs-canvas-subtle)),
-    color-mix(in srgb, var(--ghs-ring-unseen-end) 6%, var(--ghs-canvas-subtle))
-  );
-  transition: box-shadow var(--ghs-transition-normal);
-}
-
-.hero-demo:focus-visible .hero-demo__panels,
-.hero-demo:hover .hero-demo__panels {
-  box-shadow: var(--ghs-shadow-overlay);
-}
-
-@media (min-width: 900px) {
-  .hero-demo__panels {
-    grid-template-columns: 1.1fr 0.9fr;
-  }
-}
-
 /* -- browser-pr mock -- */
-
-.pr-mock {
-  background: var(--ghs-canvas);
-  border: 1px solid var(--ghs-border-default);
-  border-radius: var(--ghs-radius-md);
-  overflow: hidden;
-}
-
-.pr-mock__topbar {
-  display: flex;
-  align-items: center;
-  gap: var(--ghs-space-2);
-  padding: var(--ghs-space-2) var(--ghs-space-3);
-  background: var(--ghs-canvas-subtle);
-  border-bottom: 1px solid var(--ghs-border-muted);
-  font-size: var(--ghs-font-size-sm);
-  color: var(--ghs-fg-muted);
-}
-
-.pr-mock__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ghs-border-default);
-}
-
-.pr-mock__body {
-  padding: var(--ghs-space-4);
-}
-
-.pr-mock__title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0 0 var(--ghs-space-1);
-}
-
-.pr-mock__meta {
-  font-size: var(--ghs-font-size-sm);
-  color: var(--ghs-fg-muted);
-  margin: 0 0 var(--ghs-space-4);
-}
-
-.pr-mock__row-label {
-  font-size: var(--ghs-font-size-sm);
-  color: var(--ghs-fg-muted);
-  margin: 0 0 var(--ghs-space-2);
-}
-
-.pr-mock__rings {
-  display: flex;
-  gap: var(--ghs-space-3);
-}
-
-.mock-ring {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  padding: 2px;
-  background: var(--ghs-ring-seen);
-}
-
-.mock-ring[data-state='unseen'] {
-  background: conic-gradient(
-    from 180deg,
-    var(--ghs-ring-unseen-start),
-    var(--ghs-ring-unseen-end),
-    var(--ghs-ring-unseen-start)
-  );
-}
-
-.mock-ring__avatar {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  border: 2px solid var(--ghs-canvas);
-  display: block;
-}
-
-.pr-mock__diff {
-  margin-top: var(--ghs-space-4);
-  border: 1px solid var(--ghs-border-muted);
-  border-radius: var(--ghs-radius-sm);
-  overflow: hidden;
-  font-family:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: var(--ghs-font-size-sm);
-}
-
-.pr-mock__diff div {
-  padding: var(--ghs-space-1) var(--ghs-space-3);
-}
-
-.pr-mock__diff .add {
-  background: color-mix(in srgb, var(--ghs-success-fg) 12%, transparent);
-  color: var(--ghs-success-fg);
-}
-
-.pr-mock__diff .ctx {
-  color: var(--ghs-fg-muted);
-}
 
 /* -- terminal mock -- */
 
-.term-mock {
-  background: #0d1117;
-  border-radius: var(--ghs-radius-md);
-  overflow: hidden;
-  color: #e6edf3;
-  border: 1px solid var(--ghs-border-default);
-  display: flex;
-  flex-direction: column;
-  min-height: 280px;
-}
-
-.term-mock__topbar {
-  display: flex;
-  align-items: center;
-  gap: var(--ghs-space-2);
-  padding: var(--ghs-space-2) var(--ghs-space-3);
-  background: #161b22;
-}
-
-.term-mock__dots {
-  display: flex;
-  gap: 6px;
-}
-
-.term-mock__dots span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: block;
-  background: #6e7681;
-}
-
-.term-mock__title {
-  margin-inline: auto;
-  font-size: var(--ghs-font-size-sm);
-  color: #9198a1;
-  font-family:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-}
-
-.term-mock__body {
-  flex: 1 1 auto;
-  padding: var(--ghs-space-4);
-  font-family:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 0.875rem;
-  display: flex;
-  flex-direction: column;
-  gap: var(--ghs-space-3);
-}
-
-.term-mock__prompt {
-  color: #7ee787;
-}
-
-.term-mock__prompt::before {
-  content: '$ ';
-  color: #6e7681;
-}
-
-.term-mock__image {
-  flex: 1 1 auto;
-  min-height: 160px;
-  border-radius: var(--ghs-radius-sm);
-  overflow: hidden;
-  position: relative;
-  display: block;
-}
-
-.term-mock__image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.term-mock__caption {
-  color: #6e7681;
-  font-size: var(--ghs-font-size-sm);
-}
-
 /* ---------------------------------------------------------------- columns */
 
-.columns {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--ghs-space-5);
-}
-
-@media (min-width: 720px) {
-  .columns {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-.col-card {
-  border: 1px solid var(--ghs-border-muted);
-  border-radius: var(--ghs-radius-lg);
-  padding: var(--ghs-space-5);
-  background: var(--ghs-canvas);
-}
-
-.col-card__icon {
-  width: 40px;
-  height: 40px;
-  margin-bottom: var(--ghs-space-3);
-}
-
-.col-card h3 {
-  margin: 0 0 var(--ghs-space-2);
-  font-size: 1.0625rem;
-}
-
-.col-card p {
-  margin: 0;
-  color: var(--ghs-fg-muted);
-}
-
 /* ---------------------------------------------------------------- privacy grid */
-
-.audience-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--ghs-space-3);
-  margin: 0 0 var(--ghs-space-5);
-  list-style: none;
-  padding: 0;
-}
-
-@media (min-width: 640px) {
-  .audience-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1000px) {
-  .audience-grid {
-    grid-template-columns: repeat(5, 1fr);
-  }
-}
-
-.audience-card {
-  border: 1px solid var(--ghs-border-muted);
-  border-radius: var(--ghs-radius-md);
-  padding: var(--ghs-space-3);
-  background: var(--ghs-canvas-subtle);
-}
-
-.audience-card dt {
-  font-weight: 600;
-  margin-bottom: var(--ghs-space-1);
-}
-
-.audience-card dd {
-  margin: 0;
-  color: var(--ghs-fg-muted);
-  font-size: var(--ghs-font-size-sm);
-}
 
 .callout {
   border-left: 3px solid var(--ghs-ring-unseen-end);
@@ -771,60 +457,6 @@ pre {
 
 /* ---------------------------------------------------------------- footer */
 
-.site-footer {
-  border-top: 1px solid var(--ghs-border-muted);
-  padding-block: var(--ghs-space-6);
-  background: var(--ghs-canvas-subtle);
-}
-
-.site-footer__grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--ghs-space-4);
-}
-
-@media (min-width: 640px) {
-  .site-footer__grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-.site-footer h2 {
-  font-size: var(--ghs-font-size-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ghs-fg-muted);
-  margin: 0 0 var(--ghs-space-2);
-}
-
-.site-footer ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--ghs-space-2);
-}
-
-.site-footer a {
-  color: var(--ghs-fg-default);
-  text-decoration: none;
-  font-size: var(--ghs-font-size-body);
-}
-
-.site-footer a:hover {
-  color: var(--ghs-accent-fg);
-}
-
-.site-footer__disclaimer {
-  margin-top: var(--ghs-space-6);
-  padding-top: var(--ghs-space-4);
-  border-top: 1px solid var(--ghs-border-muted);
-  color: var(--ghs-fg-muted);
-  font-size: var(--ghs-font-size-sm);
-  max-width: 70ch;
-}
-
 /* ---------------------------------------------------------------- docs prose */
 
 .prose {
@@ -872,3 +504,13 @@ pre {
   height: 72px;
   margin: 0 auto var(--ghs-space-4);
 }
+
+}
+
+/* Unlayered on purpose: must beat @gh-stories/ui's .ghs-root font-family. */
+html body.site.ghs-root {
+  font-family: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  color: var(--ghs-fg-default);
+}
+html body.site h1, html body.site h2, html body.site h3 { letter-spacing: -0.02em; }
+html body.site code, html body.site pre, html body.site kbd { font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace; }

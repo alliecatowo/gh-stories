@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
+import tailwindcss from '@tailwindcss/vite';
 
 // Served from https://alliecatowo.github.io/gh-stories/ — every internal
 // link and asset reference must go through `import.meta.env.BASE_URL`
@@ -9,6 +10,7 @@ export default defineConfig({
   base: '/gh-stories',
   trailingSlash: 'always',
   integrations: [react()],
+  vite: { plugins: [tailwindcss()] },
   build: {
     format: 'directory',
   },
