@@ -5,22 +5,22 @@
  * entirely: it talks only to the background, never to a content script, and it
  * never assumes a github.com tab is open.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { AuthorGroup, Feed, Inbox as InboxData } from '@gh-stories/contracts';
 import type { AccountSummary } from '../../src/messaging/types.js';
-import { StoryRow, StoryViewer, Inbox } from '@gh-stories/ui';
+import { StoryRow, Inbox } from '@gh-stories/ui';
 import { callBackground } from '../../src/messaging/client.js';
-import { MediaUrlCache } from '../../src/state/mediaCache.js';
+import { MediaPathCache } from '../../src/state/mediaCache.js';
+import { ViewerBridge } from '../../src/viewer/ViewerBridge.js';
 
 type Tab = 'stories' | 'post' | 'inbox' | 'settings';
-
-const cache = new MediaUrlCache();
 
 export function App(): React.ReactElement {
   const [tab, setTab] = useState<Tab>('stories');
   const [me, setMe] = useState<AccountSummary | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [error, setError] = useState<string>('');
+  const [unreadInbox, setUnreadInbox] = useState(0);
 
   const loadSession = useCallback(async () => {
     const res = await callBackground({ type: 'ghs:session/get' });
@@ -35,8 +35,16 @@ export function App(): React.ReactElement {
 
   useEffect(() => {
     void loadSession();
-    return () => cache.revokeAll();
   }, [loadSession]);
+
+  // The unread count comes from the inbox itself; the session summary is
+  // deliberately cheap and does not make a network call for it.
+  useEffect(() => {
+    if (!signedIn) return;
+    void callBackground({ type: 'ghs:inbox/get' }).then((res) => {
+      if (res.ok) setUnreadInbox(res.data.unread ?? 0);
+    });
+  }, [signedIn]);
 
   if (signedIn === null) {
     return <div className="ghs-pop-empty">Loading…</div>;
@@ -57,14 +65,14 @@ export function App(): React.ReactElement {
             onClick={() => setTab(t)}
           >
             {t === 'stories' ? 'Stories' : t === 'post' ? 'Post' : t === 'inbox' ? 'Inbox' : 'Settings'}
-            {t === 'inbox' && me?.unreadInbox ? ` (${me.unreadInbox})` : ''}
+            {t === 'inbox' && unreadInbox > 0 ? ` (${unreadInbox})` : ''}
           </button>
         ))}
       </div>
       <div className="ghs-pop-body">
-        {tab === 'stories' && <StoriesTab />}
+        {tab === 'stories' && <StoriesTab onCreate={() => setTab('post')} />}
         {tab === 'post' && <PostTab onPosted={loadSession} />}
-        {tab === 'inbox' && <InboxTab />}
+        {tab === 'inbox' && <InboxTab onUnreadChange={setUnreadInbox} />}
         {tab === 'settings' && <SettingsTab me={me} onSignedOut={loadSession} />}
       </div>
     </>
@@ -115,7 +123,7 @@ function SignIn({ onDone, error }: { onDone: () => void; error: string }): React
   );
 }
 
-function StoriesTab(): React.ReactElement {
+function StoriesTab({ onCreate }: { onCreate: () => void }): React.ReactElement {
   const [feed, setFeed] = useState<Feed | null>(null);
   const [open, setOpen] = useState<{ groups: AuthorGroup[]; index: number } | null>(null);
   const [error, setError] = useState('');
@@ -139,7 +147,7 @@ function StoriesTab(): React.ReactElement {
     const all = feed.me?.items?.length ? [feed.me, ...groups] : groups;
     const index = all.findIndex((g) => g.author.login === login);
     if (index < 0) return;
-    void cache.warmCurrent(all[index]!, 0).then(() => setOpen({ groups: all, index }));
+    setOpen({ groups: all, index });
   };
 
   return (
@@ -157,9 +165,7 @@ function StoriesTab(): React.ReactElement {
         groups={groups}
         onOpenGroup={openAt}
         onOpenOwn={() => feed.me && openAt(feed.me.author.login)}
-        onCreate={() => {
-          /* the Post tab owns composing */
-        }}
+        onCreate={onCreate}
       />
       {groups.length === 0 && !feed.me?.items?.length ? (
         <p className="ghs-pop-empty">
@@ -169,19 +175,7 @@ function StoriesTab(): React.ReactElement {
         </p>
       ) : null}
       {open ? (
-        <StoryViewer
-          groups={open.groups}
-          startGroupIndex={open.index}
-          mediaUrl={(storyId, variant) => cache.get(storyId, variant)}
-          onClose={() => setOpen(null)}
-          onViewed={(storyId) => void callBackground({ type: 'ghs:story/view', storyId })}
-          onReply={async (storyId, body) => {
-            await callBackground({ type: 'ghs:story/reply', storyId, body });
-          }}
-          onReact={async (storyId, emoji) => {
-            await callBackground({ type: 'ghs:story/react', storyId, emoji });
-          }}
-        />
+        <ViewerBridge groups={open.groups} startGroupIndex={open.index} onClose={() => setOpen(null)} />
       ) : null}
     </>
   );
@@ -213,27 +207,69 @@ function ComposerLoader({ onPosted }: { onPosted: () => void }): React.ReactElem
   );
 }
 
-function InboxTab(): React.ReactElement {
+function InboxTab({ onUnreadChange }: { onUnreadChange: (count: number) => void }): React.ReactElement {
   const [inbox, setInbox] = useState<InboxData | null>(null);
+  const [error, setError] = useState('');
+  const [, setThumbRevision] = useState(0);
+  const thumbsRef = useRef<MediaPathCache | null>(null);
+  if (!thumbsRef.current) thumbsRef.current = new MediaPathCache();
+  const thumbs = thumbsRef.current;
+
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       const res = await callBackground({ type: 'ghs:inbox/get' });
-      if (res.ok) {
-        setInbox(res.data);
-        void callBackground({ type: 'ghs:inbox/read', all: true });
+      if (cancelled) return;
+      if (!res.ok) {
+        setError(res.error.message);
+        return;
+      }
+      setInbox(res.data);
+      // The thumbnail path is behind the authorization gateway, so it is
+      // fetched through the background and shown as a blob URL.
+      for (const entry of res.data.entries ?? []) {
+        if (entry.story_expired || !entry.story_thumb_url) continue;
+        void thumbs.prefetch(entry.story_thumb_url).then(() => {
+          if (!cancelled) setThumbRevision((n) => n + 1);
+        });
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+      thumbs.revokeAll();
+    };
+  }, [thumbs]);
+
+  const unread = inbox?.unread;
+  useEffect(() => {
+    if (unread !== undefined) onUnreadChange(unread);
+  }, [unread, onUnreadChange]);
+
+  const markRead = async (id: string) => {
+    const res = await callBackground({ type: 'ghs:inbox/read', eventIds: [id] });
+    if (!res.ok) return;
+    setInbox((prev) => {
+      if (!prev) return prev;
+      let cleared = false;
+      const entries = (prev.entries ?? []).map((entry) => {
+        if (entry.id !== id || entry.read_at) return entry;
+        cleared = true;
+        return { ...entry, read_at: new Date().toISOString() };
+      });
+      return { ...prev, entries, unread: cleared ? Math.max(0, (prev.unread ?? 1) - 1) : prev.unread };
+    });
+  };
+
+  if (error) return <p className="ghs-pop-err">{error}</p>;
   if (!inbox) return <p className="ghs-pop-muted">Loading…</p>;
   if (!inbox.entries?.length) return <p className="ghs-pop-empty">Nothing here yet.</p>;
+  // No onReply: the service forbids replying to a reply on your own Story and
+  // has no thread-reply endpoint yet, so the Inbox is read-only.
   return (
     <Inbox
       entries={inbox.entries}
-      resolveThumbUrl={(path) => path}
-      onOpenEntry={() => undefined}
-      onReply={async (storyId, body) => {
-        await callBackground({ type: 'ghs:story/reply', storyId, body });
-      }}
+      resolveThumbUrl={(path) => thumbs.resolve(path)}
+      onOpenEntry={(id) => void markRead(id)}
     />
   );
 }

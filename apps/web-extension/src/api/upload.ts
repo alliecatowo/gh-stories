@@ -10,6 +10,7 @@
 import type { Browser } from "wxt/browser";
 import type { ApiClient } from "./client.js";
 import { ApiClientError } from "./errors.js";
+import { validatePresignedUpload } from "./presign.js";
 import type { UploadStartMessage, UploadServerMessage } from "../messaging/types.js";
 
 const POLL_INTERVAL_MS = 1500;
@@ -77,10 +78,10 @@ async function putWithProgress(
         duplex: "half",
         signal,
       });
-      if (!response.ok) {
-        throw new ApiClientError({ code: `http_${response.status}`, message: "Upload failed." });
-      }
-      return;
+      if (response.ok) return;
+      // The presigned request signs Content-Length, which a streamed
+      // (chunked) body does not carry, so object stores may refuse it.
+      // Retry once as a single buffered PUT before calling it a failure.
     } catch (error) {
       if (signal.aborted) throw new ApiClientError({ code: "cancelled", message: "Upload cancelled." });
       // Fall through to the non-streaming path below if the streaming PUT
@@ -141,9 +142,12 @@ export async function runUploadFlow(
       controller.signal,
     );
 
+    // Refuse to PUT media anywhere the service origin could not legitimately
+    // point (see presign.ts).
+    const target = validatePresignedUpload(intent.url, intent.headers, await apiClient.serviceOrigin());
     send({ type: "progress", phase: "uploading", loaded: 0, total: message.byteSize });
     const bytes = decodeBase64(message.base64);
-    await putWithProgress(intent.url, intent.headers, bytes, controller.signal, (loaded, total) => {
+    await putWithProgress(target.url, target.headers, bytes, controller.signal, (loaded, total) => {
       send({ type: "progress", phase: "uploading", loaded, total });
     });
 

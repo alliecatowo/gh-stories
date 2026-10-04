@@ -28,8 +28,16 @@ export function OptionsApp(): React.ReactElement {
     void reload();
   }, [reload]);
 
-  const act = async (fn: () => Promise<unknown>) => {
-    await fn();
+  // Runs a mutation, surfaces a failure instead of swallowing it, and clears
+  // any stale message from an earlier attempt first.
+  const act = async (fn: () => Promise<{ ok: boolean; error?: { message: string } } | unknown>) => {
+    setError('');
+    setSaved('');
+    const res = (await fn()) as { ok?: boolean; error?: { message: string } } | undefined;
+    if (res && res.ok === false) {
+      setError(res.error?.message ?? 'Something went wrong. Please try again.');
+      return;
+    }
     await reload();
   };
 
@@ -124,6 +132,7 @@ export function OptionsApp(): React.ReactElement {
               type: 'ghs:session/set-service-url',
               url: serviceUrl.trim(),
             });
+            setError('');
             setSaved(res.ok ? 'Saved. Sign in again to use it.' : '');
             if (!res.ok) setError(res.error.message);
           }}
@@ -144,7 +153,10 @@ export function OptionsApp(): React.ReactElement {
 
       <h2 style={{ fontSize: 16, marginTop: 36 }}>Sessions</h2>
       <button
-        onClick={() => act(() => callBackground({ type: 'ghs:settings/sign-out-all' }))}
+        onClick={() => {
+          if (!window.confirm('Sign out of every session on every device? You will need to sign in again.')) return;
+          void act(() => callBackground({ type: 'ghs:settings/sign-out-all' }));
+        }}
         style={{
           padding: '8px 16px',
           borderRadius: 8,

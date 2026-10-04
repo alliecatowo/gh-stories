@@ -10,15 +10,16 @@ const TARGETS = [
 ] as const;
 
 /**
- * Builds any missing browser target before the manifest tests run.
+ * Rebuilds every browser target before the manifest tests run.
  *
- * The suite validates BUILT manifests, so it must not depend on a build step
- * having happened earlier in some pipeline — running the tests before the
- * build is a perfectly reasonable thing to do, and it should just work.
+ * The suite validates BUILT manifests, so a stale `.output` from an earlier
+ * build would let a manifest or bundle regression pass. Always rebuilding makes
+ * the result depend only on the current source. Set GHS_REUSE_BUILD=1 to reuse
+ * an existing build when iterating locally.
  */
 export default function setup(): void {
   for (const [browser, dir] of TARGETS) {
-    if (existsSync(resolve(ROOT, '.output', dir, 'manifest.json'))) continue;
+    if (process.env.GHS_REUSE_BUILD === '1' && existsSync(resolve(ROOT, '.output', dir, 'manifest.json'))) continue;
     execFileSync('npx', ['wxt', 'build', '-b', browser], {
       cwd: ROOT,
       stdio: 'inherit',

@@ -84,9 +84,23 @@ gcloud run jobs add-iam-policy-binding gh-stories-worker \
 3. Create a narrowly scoped R2 token (this bucket, read/write only) and store
    its key id/secret as `ghs-production-r2-access-key-id` /
    `ghs-production-r2-secret-access-key`.
-4. CORS on the bucket: only the production service origin and the extension
-   origins that need direct uploads. Never make the bucket public.
-5. Migrations run from the release artifact (`gh-stories-migrate` job, step 3
+4. CORS on the bucket: the extension PUTs to presigned URLs from its service
+   worker. A packaged extension has no fixed origin to allow-list (Firefox
+   uses a random per-install `moz-extension://` id), so the rule allows `PUT`
+   from any origin with only `content-type`, `content-md5` and `x-amz-*`
+   headers; the presigned signature, not the origin, authorizes the write.
+   Applied with
+   `wrangler r2 bucket cors set gh-stories-media --file cors.json` where
+   `cors.json` is
+   `{"rules":[{"allowed":{"origins":["*"],"methods":["PUT"],"headers":["content-type","content-md5","x-amz-*"]},"maxAgeSeconds":3600}]}`.
+   Never make the bucket public. The extension additionally refuses any
+   upload target that is not https on a public hostname (or the service origin).
+5. Lifecycle: Stories live 24h (`StoryLifetime`), and the API already hides
+   expired media on read. As a backstop, the bucket expires every object after
+   2 days (R2 lifecycle ages are whole days and deletion can lag up to 24h):
+   `wrangler r2 bucket lifecycle add gh-stories-media expire-media-after-2d --expire-days 2`.
+   The worker sweep remains responsible for database rows.
+6. Migrations run from the release artifact (`gh-stories-migrate` job, step 3
    below) — never from a developer laptop against the production database.
 
 ## 2. Secrets (operator, once per value)

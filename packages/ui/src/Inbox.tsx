@@ -9,7 +9,10 @@ export interface InboxProps {
   /** Called when an entry is opened; the host is responsible for marking it
    * read server-side and passing back updated `entries`. */
   onOpenEntry: (id: string) => void;
-  onReply: (storyId: string, body: string) => Promise<void>;
+  /** Omit when the service has no thread-reply endpoint: replying to a
+   * reply on your own Story is rejected by the server, so the composer is
+   * only shown when the host can actually deliver the message. */
+  onReply?: (storyId: string, body: string) => Promise<void>;
 }
 
 function summaryFor(entry: InboxEntry): string {
@@ -45,7 +48,7 @@ export function Inbox(props: InboxProps): React.JSX.Element {
   }
 
   async function submitReply() {
-    if (!selected?.story_id || draft.trim() === "") return;
+    if (!selected?.story_id || !onReply || draft.trim() === "") return;
     setSending(true);
     setError(null);
     try {
@@ -66,7 +69,7 @@ export function Inbox(props: InboxProps): React.JSX.Element {
         ) : (
           entries.map((entry) => {
             const unread = !entry.read_at;
-            const thumbUrl = entry.story_expired ? undefined : entry.story_thumb_url;
+            const thumbUrl = entry.story_expired || !entry.story_thumb_url ? "" : resolveThumbUrl(entry.story_thumb_url);
             return (
               <li key={entry.id ?? summaryFor(entry)}>
                 <button
@@ -78,7 +81,7 @@ export function Inbox(props: InboxProps): React.JSX.Element {
                 >
                   <span className="ghs-inbox__thumb" aria-hidden="true">
                     {thumbUrl ? (
-                      <img src={resolveThumbUrl(thumbUrl)} alt="" />
+                      <img src={thumbUrl} alt="" />
                     ) : entry.story_id ? (
                       <span className="ghs-inbox__thumb-expired">Expired</span>
                     ) : null}
@@ -111,7 +114,7 @@ export function Inbox(props: InboxProps): React.JSX.Element {
             <p className="ghs-inbox__thread-body">{selected.body}</p>
           ) : null}
 
-          {selected.story_id && !selected.story_expired ? (
+          {onReply && selected.story_id && !selected.story_expired ? (
             <form
               className="ghs-inbox__composer"
               onSubmit={(event) => {
@@ -134,7 +137,7 @@ export function Inbox(props: InboxProps): React.JSX.Element {
                 {sending ? "Sending…" : "Send"}
               </button>
             </form>
-          ) : selected.story_id ? (
+          ) : onReply && selected.story_id ? (
             <p className="ghs-inbox__thread-expired-note">
               This Story expired — you can no longer reply here.
             </p>

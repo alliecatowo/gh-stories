@@ -6,7 +6,13 @@ packages:
 allowBuilds:
   esbuild: true
   spawn-sync: set this to true or false
+# GHSA-ch52-4w7c-c8xp (http-cache-semantics <=4.2.0, high) is fixed only in
+# 4.3.0, published after the minimum release age window. Exact-version
+# exclusion for that one security fix; delete once 4.3.0 is old enough.
+minimumReleaseAgeExclude:
+  - http-cache-semantics@4.3.0
 overrides:
   "brace-expansion@>=1.0.0 <1.1.21": "^1.1.21"
   "brace-expansion@>=2.0.0 <2.1.7": "^2.1.7"
   "fast-uri@<3.1.8": "^3.1.8"
+  "http-cache-semantics@<4.2.1": "^4.2.1"

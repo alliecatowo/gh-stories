@@ -52,6 +52,9 @@ interface RequestOptions {
   /** When true, omits the Authorization header (only the two unauthenticated
    * `/health/*` endpoints and `/auth/*` bootstrap calls need this). */
   anonymous?: boolean;
+  /** Authenticate with this specific token instead of the active account's
+   * (used to revoke a stored account that is not the active one). */
+  token?: string;
   /** Parse the response as raw bytes instead of JSON (media fetch). */
   binary?: boolean;
 }
@@ -63,6 +66,11 @@ interface BinaryResult {
 
 export class ApiClient {
   constructor(private readonly deps: ApiClientDeps) {}
+
+  /** The configured service origin (used to validate presigned upload targets). */
+  serviceOrigin(): Promise<string> {
+    return this.deps.getServiceOrigin();
+  }
 
   private async request<T>(options: RequestOptions): Promise<T> {
     const origin = await this.deps.getServiceOrigin();
@@ -77,7 +85,7 @@ export class ApiClient {
     if (options.body !== undefined) headers["content-type"] = "application/json";
     if (options.idempotencyKey) headers["idempotency-key"] = options.idempotencyKey;
     if (!options.anonymous) {
-      const token = await this.deps.getToken();
+      const token = options.token ?? (await this.deps.getToken());
       if (!token) throw ApiClientError.unauthenticated();
       headers.authorization = `Bearer ${token}`;
     }
@@ -157,6 +165,10 @@ export class ApiClient {
   }
   logout(signal?: AbortSignal): Promise<void> {
     return this.request({ method: "POST", path: "/auth/logout", signal });
+  }
+  /** Revokes the session behind `token` server-side, whichever account is active. */
+  logoutToken(token: string, signal?: AbortSignal): Promise<void> {
+    return this.request({ method: "POST", path: "/auth/logout", token, signal });
   }
   listSessions(signal?: AbortSignal): Promise<{ sessions: SessionInfo[] }> {
     return this.request({ path: "/auth/sessions", signal });

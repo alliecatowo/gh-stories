@@ -16,13 +16,20 @@ import {
   type AccountIdentity,
   type RingDecoration,
 } from "../src/adapters/index.js";
+import type { RingStatus } from "@gh-stories/contracts";
 import { callBackground } from "../src/messaging/client.js";
+import { isLogin } from "../src/messaging/guards.js";
 import { OverlayHost } from "../src/content/overlayHost.js";
 import { mountStoriesRow, type StoriesRowMount } from "../src/content/storiesRow.js";
 import { mountProfileAffordance, type ProfileAffordanceMount } from "../src/content/profileAffordance.js";
 
 const MUTATION_DEBOUNCE_MS = 150;
 const STATUS_DEBOUNCE_MS = 50;
+/** The service accepts at most this many ids and this many logins per request. */
+const STATUS_BATCH_LIMIT = 100;
+const STATUS_RETRY_DELAYS_MS = [1_000, 5_000, 20_000];
+/** Rings are re-read when the tab becomes visible again after this long. */
+const STATUS_REFRESH_AFTER_MS = 60_000;
 
 export default defineContentScript({
   matches: ["https://github.com/*"],
@@ -32,14 +39,19 @@ export default defineContentScript({
 
   main(ctx) {
     const processedImgs = new WeakSet<HTMLImageElement>();
-    const tracked = new WeakMap<HTMLImageElement, { identity: AccountIdentity; decoration: RingDecoration }>();
+    // A strong Map (not a WeakMap) so removed avatars can be found and torn
+    // down: each decoration owns a React root and a shadow host.
+    const tracked = new Map<HTMLImageElement, { identity: AccountIdentity; decoration: RingDecoration }>();
+    const statusAttempts = new WeakMap<HTMLImageElement, number>();
+    let lastStatusRefresh = Date.now();
 
-    const overlay = new OverlayHost();
+    const overlay = new OverlayHost(() => refreshStatuses());
     let dashboardRow: StoriesRowMount | null = null;
     let profileAffordance: ProfileAffordanceMount | null = null;
     let currentProfileLogin: string | null = null;
 
     let pendingIdentities: AccountIdentity[] = [];
+    const retryTimers = new Set<number>();
     let statusTimer: number | undefined;
 
     function scheduleStatusFlush(): void {
@@ -50,29 +62,75 @@ export default defineContentScript({
       }, STATUS_DEBOUNCE_MS);
     }
 
+    function chunk<T>(values: T[]): T[][] {
+      const out: T[][] = [];
+      for (let i = 0; i < values.length; i += STATUS_BATCH_LIMIT) out.push(values.slice(i, i + STATUS_BATCH_LIMIT));
+      return out;
+    }
+
+    /** Tears down decorations whose avatar GitHub has removed from the page. */
+    function sweepDetached(): void {
+      for (const [img, record] of tracked) {
+        if (img.isConnected) continue;
+        record.decoration.destroy();
+        tracked.delete(img);
+        processedImgs.delete(img);
+      }
+    }
+
     async function flushStatusRequests(): Promise<void> {
-      const batch = pendingIdentities;
+      const batch = pendingIdentities.filter((identity) => tracked.has(identity.avatarImg));
       pendingIdentities = [];
       if (batch.length === 0) return;
 
-      const ids: number[] = [];
-      const logins: string[] = [];
+      // Deduplicate: a busy thread repeats the same few people many times.
+      const ids = new Set<number>();
+      const logins = new Map<string, string>();
       for (const identity of batch) {
-        if (identity.githubUserId !== undefined) ids.push(identity.githubUserId);
-        else logins.push(identity.login);
+        if (identity.githubUserId !== undefined) ids.add(identity.githubUserId);
+        else logins.set(identity.login.toLowerCase(), identity.login);
       }
 
-      const result = await callBackground({ type: "ghs:ring/status", githubUserIds: ids, logins });
-      if (!result.ok) return;
+      const calls = [
+        ...chunk([...ids]).map((githubUserIds) => ({ githubUserIds, logins: [] as string[] })),
+        ...chunk([...logins.values()]).map((chunked) => ({ githubUserIds: [] as number[], logins: chunked })),
+      ];
+      const results = await Promise.all(
+        calls.map(async (call) => ({ call, result: await callBackground({ type: "ghs:ring/status", ...call }) })),
+      );
 
+      const byId = new Map<number, RingStatus>();
+      const byLogin = new Map<string, RingStatus>();
+      const answeredIds = new Set<number>();
+      const answeredLogins = new Set<string>();
+      for (const { call, result } of results) {
+        if (!result.ok) continue;
+        for (const id of call.githubUserIds) answeredIds.add(id);
+        for (const login of call.logins) answeredLogins.add(login.toLowerCase());
+        for (const entry of result.data.entries) {
+          if (entry.github_user_id !== undefined) byId.set(entry.github_user_id, entry);
+          if (entry.login) byLogin.set(entry.login.toLowerCase(), entry);
+        }
+      }
+
+      // A failed or cancelled request is NOT "this person has no Story":
+      // leave those avatars untouched and try again, instead of caching an
+      // empty ring for the rest of the page's life.
+      const retry: AccountIdentity[] = [];
       for (const identity of batch) {
-        const entry = result.data.entries.find(
-          (candidate) =>
-            (identity.githubUserId !== undefined && candidate.github_user_id === identity.githubUserId) ||
-            (candidate.login && candidate.login.toLowerCase() === identity.login.toLowerCase()),
-        );
         const record = tracked.get(identity.avatarImg);
         if (!record) continue;
+        const entry =
+          (identity.githubUserId !== undefined ? byId.get(identity.githubUserId) : undefined) ??
+          byLogin.get(identity.login.toLowerCase());
+        const answered =
+          identity.githubUserId !== undefined
+            ? answeredIds.has(identity.githubUserId)
+            : answeredLogins.has(identity.login.toLowerCase());
+        if (!entry && !answered) {
+          retry.push(identity);
+          continue;
+        }
         if (!entry || !entry.has_active) {
           record.decoration.update("none", false);
         } else if (entry.muted) {
@@ -83,6 +141,34 @@ export default defineContentScript({
           record.decoration.update("seen", true);
         }
       }
+      if (retry.length > 0) scheduleRetry(retry);
+    }
+
+    function scheduleRetry(identities: AccountIdentity[]): void {
+      const due: AccountIdentity[] = [];
+      let delay = STATUS_RETRY_DELAYS_MS[0]!;
+      for (const identity of identities) {
+        const attempt = statusAttempts.get(identity.avatarImg) ?? 0;
+        if (attempt >= STATUS_RETRY_DELAYS_MS.length) continue;
+        statusAttempts.set(identity.avatarImg, attempt + 1);
+        delay = STATUS_RETRY_DELAYS_MS[attempt]!;
+        due.push(identity);
+      }
+      if (due.length === 0) return;
+      retryTimers.add(
+        window.setTimeout(() => {
+          pendingIdentities.push(...due);
+          scheduleStatusFlush();
+        }, delay),
+      );
+    }
+
+    /** Re-reads every visible ring (tab refocus, viewer closed) so seen/unseen
+     * state and newly posted Stories show up without a page reload. */
+    function refreshStatuses(): void {
+      lastStatusRefresh = Date.now();
+      for (const { identity } of tracked.values()) pendingIdentities.push(identity);
+      if (pendingIdentities.length > 0) scheduleStatusFlush();
     }
 
     function decorateAvatars(root: ParentNode): void {
@@ -92,7 +178,9 @@ export default defineContentScript({
         processedImgs.add(img);
 
         const identity = extractIdentity(img);
-        if (!identity) continue;
+        // Logins the background would reject (and so drop the whole batch)
+        // are never sent.
+        if (!identity || !isLogin(identity.login)) continue;
 
         const decoration = wrapAvatarWithRing(identity, {
           initialState: "none",
@@ -159,6 +247,7 @@ export default defineContentScript({
         mutationTimer = undefined;
         const roots = Array.from(mutatedRoots);
         mutatedRoots.clear();
+        sweepDetached();
         for (const root of roots) processSubtree(root);
       }, MUTATION_DEBOUNCE_MS);
     }
@@ -182,9 +271,18 @@ export default defineContentScript({
         void callBackground({ type: "ghs:ring/cancel" });
         dashboardRow?.destroy();
         dashboardRow = null;
+        sweepDetached();
+        overlay.attach();
         processSubtree(document.body);
       }, 0);
     }
+
+    function handleVisibility(): void {
+      if (document.visibilityState === "visible" && Date.now() - lastStatusRefresh > STATUS_REFRESH_AFTER_MS) {
+        refreshStatuses();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
 
     document.addEventListener("turbo:load", handleNavigation);
     document.addEventListener("turbo:render", handleNavigation);
@@ -213,6 +311,10 @@ export default defineContentScript({
       if (mutationTimer !== undefined) window.clearTimeout(mutationTimer);
       if (statusTimer !== undefined) window.clearTimeout(statusTimer);
       if (navigationTimer !== undefined) window.clearTimeout(navigationTimer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      for (const timer of retryTimers) window.clearTimeout(timer);
+      for (const { decoration } of tracked.values()) decoration.destroy();
+      tracked.clear();
       document.removeEventListener("turbo:load", handleNavigation);
       document.removeEventListener("turbo:render", handleNavigation);
       document.removeEventListener("pjax:end", handleNavigation);

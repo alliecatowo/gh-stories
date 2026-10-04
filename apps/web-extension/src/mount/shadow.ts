@@ -27,6 +27,43 @@ export interface ShadowMountOptions {
   extraCss?: string;
 }
 
+// Constructable stylesheets are parsed once and shared by every shadow root,
+// instead of copying the whole UI stylesheet into a <style> per avatar.
+// Falls back to a <style> element where adoptedStyleSheets is unavailable.
+const sheetCache = new Map<string, CSSStyleSheet>();
+
+function sharedSheet(css: string): CSSStyleSheet | null {
+  try {
+    if (typeof CSSStyleSheet === "undefined" || !("replaceSync" in CSSStyleSheet.prototype)) return null;
+    let sheet = sheetCache.get(css);
+    if (!sheet) {
+      sheet = new CSSStyleSheet();
+      sheet.replaceSync(css);
+      sheetCache.set(css, sheet);
+    }
+    return sheet;
+  } catch {
+    return null;
+  }
+}
+
+function applyStyles(shadow: ShadowRoot, css: string): void {
+  const sheet = sharedSheet(css);
+  if (sheet && "adoptedStyleSheets" in shadow) {
+    try {
+      shadow.adoptedStyleSheets = [sheet];
+      // Some content-script contexts accept the assignment without applying
+      // it; only trust it if it stuck.
+      if (shadow.adoptedStyleSheets[0] === sheet) return;
+    } catch {
+      /* fall through to a <style> element */
+    }
+  }
+  const style = document.createElement("style");
+  style.textContent = css;
+  shadow.appendChild(style);
+}
+
 export function createShadowMount(options: ShadowMountOptions = {}): ShadowMount {
   const host = document.createElement(options.tagName ?? "ghs-root-host");
   // Reset any inherited page styles on the host element itself; the shadow
@@ -36,9 +73,7 @@ export function createShadowMount(options: ShadowMountOptions = {}): ShadowMount
   host.style.display = "inline-block";
 
   const shadow = host.attachShadow({ mode: options.mode ?? "open" });
-  const style = document.createElement("style");
-  style.textContent = options.extraCss ? `${stylesText}\n${options.extraCss}` : stylesText;
-  shadow.appendChild(style);
+  applyStyles(shadow, options.extraCss ? `${stylesText}\n${options.extraCss}` : stylesText);
 
   const container = document.createElement("div");
   container.className = "ghs-shadow-container";

@@ -16,6 +16,9 @@ export interface StoryViewerProps {
   startItemIndex?: number;
   /** Resolves an authorized gateway URL for a story's media variant. */
   mediaUrl: (storyId: string, variant: string) => string;
+  /** Fired from an effect (never during render) when the item on screen has
+   * a variant `mediaUrl` could not resolve yet, so the host can fetch it. */
+  onNeedMedia?: (storyId: string, variant: string) => void;
   onClose: () => void;
   onAdvanceGroup?: (login: string) => void;
   onViewed?: (storyId: string) => void;
@@ -23,8 +26,10 @@ export interface StoryViewerProps {
   onReact?: (storyId: string, emoji: Emoji | null) => Promise<void>;
   onOpenViewers?: (storyId: string) => void;
   onOpenProfile?: (login: string) => void;
-  onReport?: (storyId: string) => void;
-  onDelete?: (storyId: string) => void;
+  /** Report/delete may reject; the viewer then shows the error instead of
+   * pretending the action worked. */
+  onReport?: (storyId: string) => void | Promise<void>;
+  onDelete?: (storyId: string) => void | Promise<void>;
   serverTimeOffsetMs?: number;
   reducedMotion?: boolean;
   /** Focus returns here on close. */
@@ -62,6 +67,7 @@ export function StoryViewer(props: StoryViewerProps): React.JSX.Element {
   const {
     groups,
     mediaUrl,
+    onNeedMedia,
     onClose,
     onAdvanceGroup,
     onViewed,
@@ -91,6 +97,7 @@ export function StoryViewer(props: StoryViewerProps): React.JSX.Element {
   const [reactionOverride, setReactionOverride] = useState<Record<string, Emoji | null>>({});
   const [replyDraft, setReplyDraft] = useState("");
   const [replySending, setReplySending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
 
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -300,12 +307,29 @@ export function StoryViewer(props: StoryViewerProps): React.JSX.Element {
     pointerRef.current = null;
   }
 
+  useEffect(() => {
+    setActionError(null);
+  }, [groupIndex, itemIndex]);
+
+  async function runItemAction(label: string, action: () => void | Promise<void>) {
+    setMenuOpen(false);
+    setActionError(null);
+    try {
+      await action();
+    } catch (error) {
+      setActionError(error instanceof Error && error.message ? error.message : `Couldn't ${label}. Try again.`);
+    }
+  }
+
   async function submitReply() {
     if (!item?.id || !onReply || replyDraft.trim() === "") return;
     setReplySending(true);
+    setActionError(null);
     try {
       await onReply(item.id, replyDraft.trim());
       setReplyDraft("");
+    } catch (error) {
+      setActionError(error instanceof Error && error.message ? error.message : "Couldn't send your reply. Try again.");
     } finally {
       setReplySending(false);
     }
@@ -315,8 +339,16 @@ export function StoryViewer(props: StoryViewerProps): React.JSX.Element {
     if (!item?.id || !onReact) return;
     const current = reactionOverride[item.id] ?? item.my_reaction ?? null;
     const next = current === emoji ? null : emoji;
-    setReactionOverride((prev) => ({ ...prev, [item.id as string]: next }));
-    await onReact(item.id, next);
+    const storyId = item.id;
+    setActionError(null);
+    setReactionOverride((prev) => ({ ...prev, [storyId]: next }));
+    try {
+      await onReact(storyId, next);
+    } catch (error) {
+      // Roll the optimistic highlight back: the reaction did not land.
+      setReactionOverride((prev) => ({ ...prev, [storyId]: current }));
+      setActionError(error instanceof Error && error.message ? error.message : "Couldn't save your reaction. Try again.");
+    }
   }
 
   const nowMs = Date.now() + serverTimeOffsetMs;
@@ -405,12 +437,12 @@ export function StoryViewer(props: StoryViewerProps): React.JSX.Element {
                     Open profile
                   </button>
                   {!item.is_owner && onReport ? (
-                    <button role="menuitem" type="button" onClick={() => item.id && onReport(item.id)}>
+                    <button role="menuitem" type="button" onClick={() => item.id && void runItemAction("report this Story", () => onReport(item.id as string))}>
                       Report
                     </button>
                   ) : null}
                   {item.is_owner && onDelete ? (
-                    <button role="menuitem" type="button" onClick={() => item.id && onDelete(item.id)}>
+                    <button role="menuitem" type="button" onClick={() => item.id && void runItemAction("delete this Story", () => onDelete(item.id as string))}>
                       Delete
                     </button>
                   ) : null}
@@ -429,6 +461,7 @@ export function StoryViewer(props: StoryViewerProps): React.JSX.Element {
                 <MediaStage
                   item={item}
                   mediaUrl={mediaUrl}
+                  onNeedMedia={onNeedMedia}
                   status={mediaStatus}
                   onStatus={setMediaStatus}
                   onViewed={() => {
@@ -459,6 +492,11 @@ export function StoryViewer(props: StoryViewerProps): React.JSX.Element {
             </div>
 
             <footer className="ghs-viewer__footer">
+              {actionError ? (
+                <p className="ghs-viewer__action-error" role="alert">
+                  {actionError}
+                </p>
+              ) : null}
               {!onReply ? (
                 <p className="ghs-viewer__signed-out">Sign in to reply and react.</p>
               ) : (
@@ -543,6 +581,7 @@ function StagePlaceholder(props: { text: string }): React.JSX.Element {
 interface MediaStageProps {
   item: StoryItem;
   mediaUrl: (storyId: string, variant: string) => string;
+  onNeedMedia?: (storyId: string, variant: string) => void;
   status: "loading" | "ready" | "error";
   onStatus: (status: "loading" | "ready" | "error") => void;
   onViewed: () => void;
@@ -555,13 +594,24 @@ interface MediaStageProps {
 }
 
 function MediaStage(props: MediaStageProps): React.JSX.Element {
-  const { item, mediaUrl, status, onStatus, onViewed, videoRef, muted, onToggleMuted, needsPlayTap, onManualPlay, onEnded } = props;
+  const { item, mediaUrl, onNeedMedia, status, onStatus, onViewed, videoRef, muted, onToggleMuted, needsPlayTap, onManualPlay, onEnded } = props;
   const isVideo = item.media_kind === "video";
   const primary = isVideo ? findVariant(item, "video") : findVariant(item, "image");
   const poster = findVariant(item, "poster");
   const backdropVariant = poster ?? primary;
   const src = primary && item.id ? mediaUrl(item.id, primary.kind) : undefined;
   const backdropSrc = backdropVariant && item.id ? mediaUrl(item.id, backdropVariant.kind) : undefined;
+
+  // Ask the host to fetch whatever is not resolved yet. Keyed on the item and
+  // what resolved, so a failed fetch is not retried on every render.
+  const itemId = item.id;
+  const primaryKind = primary?.kind;
+  const backdropKind = backdropVariant?.kind;
+  useEffect(() => {
+    if (!onNeedMedia || !itemId) return;
+    if (primaryKind && !src) onNeedMedia(itemId, primaryKind);
+    if (backdropKind && !backdropSrc) onNeedMedia(itemId, backdropKind);
+  }, [onNeedMedia, itemId, primaryKind, backdropKind, src, backdropSrc]);
 
   if (!src) {
     return <StagePlaceholder text="Couldn't load this Story." />;

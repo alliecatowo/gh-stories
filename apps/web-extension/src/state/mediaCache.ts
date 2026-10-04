@@ -20,8 +20,12 @@ function decodeMedia(base64: string, mime: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
+/** After a failed fetch, wait this long before asking the background again. */
+const FAILURE_COOLDOWN_MS = 15_000;
+
 export class MediaUrlCache {
   private readonly urls = new Map<string, string>();
+  private readonly failedAt = new Map<string, number>();
   private readonly inflight = new Map<string, Promise<string | null>>();
 
   /** Synchronous accessor for `StoryViewer`'s `mediaUrl` prop. Returns an
@@ -38,10 +42,16 @@ export class MediaUrlCache {
     if (cached) return cached;
     const existing = this.inflight.get(key);
     if (existing) return existing;
+    const failed = this.failedAt.get(key);
+    if (failed !== undefined && Date.now() - failed < FAILURE_COOLDOWN_MS) return null;
 
     const promise = (async () => {
       const result = await callBackground({ type: "ghs:media/fetch", storyId, variant });
-      if (!result.ok) return null;
+      if (!result.ok) {
+        this.failedAt.set(key, Date.now());
+        return null;
+      }
+      this.failedAt.delete(key);
       const url = URL.createObjectURL(decodeMedia(result.data.base64, result.data.mime));
       this.urls.set(key, url);
       return url;
@@ -76,6 +86,7 @@ export class MediaUrlCache {
   revokeAll(): void {
     for (const url of this.urls.values()) URL.revokeObjectURL(url);
     this.urls.clear();
+    this.failedAt.clear();
   }
 }
 

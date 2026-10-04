@@ -45,25 +45,28 @@ export function ViewerBridge(props: ViewerBridgeProps): React.JSX.Element {
   }, []);
 
   /**
-   * Resolves a media URL for the item currently on screen.
-   *
-   * `StoryViewer` asks synchronously, but media has to be fetched through the
-   * background (the session token never reaches this context). So a miss
-   * starts the fetch and re-renders when it lands, rather than leaving the
-   * viewer stuck on "Couldn't load this Story" forever.
-   *
-   * Fetching here — lazily, for the item actually being displayed — is also
-   * what keeps the product honest: the media gateway records a view when it
-   * delivers bytes, so nothing is fetched ahead of being shown.
+   * Resolves a media URL for the item currently on screen. Pure lookup: it
+   * is called during render, so it must not fetch.
    */
-  const resolveMedia = useCallback(
-    (storyId: string, variant: string): string => {
-      const cached = cache.get(storyId, variant);
-      if (cached) return cached;
+  const resolveMedia = useCallback((storyId: string, variant: string): string => cache.get(storyId, variant), [cache]);
+
+  /**
+   * Called by the viewer from an effect when the item on screen has a variant
+   * that is not cached yet (including after Next/Previous, which only change
+   * the viewer's own state). Fetches through the background (the session token
+   * never reaches this context) and re-renders when it lands. Failures are
+   * negatively cached by MediaUrlCache, so a broken item does not refetch in
+   * a loop.
+   *
+   * Fetching lazily, for the item actually being displayed, is also what keeps
+   * the product honest: the media gateway records a view when it delivers
+   * bytes, so nothing is fetched ahead of being shown.
+   */
+  const needMedia = useCallback(
+    (storyId: string, variant: string): void => {
       void cache.ensure(storyId, variant).then((url) => {
         if (url && mountedRef.current) setRevision((n) => n + 1);
       });
-      return "";
     },
     [cache],
   );
@@ -73,6 +76,7 @@ export function ViewerBridge(props: ViewerBridgeProps): React.JSX.Element {
       groups={groups}
       startGroupIndex={startGroupIndex}
       mediaUrl={resolveMedia}
+      onNeedMedia={needMedia}
       onClose={onClose}
       onAdvanceGroup={(login) => {
         const next = groups.find((group) => group.author.login === login);
@@ -92,16 +96,20 @@ export function ViewerBridge(props: ViewerBridgeProps): React.JSX.Element {
         if (!result.ok) throw new Error(result.error.message);
       }}
       onReact={async (storyId, emoji) => {
-        await callBackground({ type: "ghs:story/react", storyId, emoji });
+        const result = await callBackground({ type: "ghs:story/react", storyId, emoji });
+        if (!result.ok) throw new Error(result.error.message);
       }}
       onOpenProfile={(login) => {
         window.open(`https://github.com/${login}`, "_blank", "noopener,noreferrer");
       }}
-      onDelete={(storyId) => {
-        void callBackground({ type: "ghs:story/delete", storyId }).then(() => onClose());
+      onDelete={async (storyId) => {
+        const result = await callBackground({ type: "ghs:story/delete", storyId });
+        if (!result.ok) throw new Error(result.error.message);
+        onClose();
       }}
-      onReport={(storyId) => {
-        void callBackground({ type: "ghs:story/report", storyId, reason: "other" });
+      onReport={async (storyId) => {
+        const result = await callBackground({ type: "ghs:story/report", storyId, reason: "other" });
+        if (!result.ok) throw new Error(result.error.message);
       }}
       container={container}
     />

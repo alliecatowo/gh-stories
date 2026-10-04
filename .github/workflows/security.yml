@@ -22,8 +22,7 @@ jobs:
           experimental: true
 
       - name: govulncheck
-        run: mise exec -- go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: mise exec -- go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
       - name: pnpm audit
         run: mise exec -- pnpm install --frozen-lockfile && mise exec -- pnpm audit --audit-level high
-        continue-on-error: true

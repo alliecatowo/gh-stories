@@ -248,3 +248,9 @@
   background: var(--ghs-canvas-subtle);
   color: var(--ghs-fg-default);
 }
+
+.ghs-composer__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ghs-fg-muted);
+}

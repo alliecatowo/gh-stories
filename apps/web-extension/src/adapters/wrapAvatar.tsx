@@ -100,7 +100,7 @@ const OVERLAY_CSS = `
 
 export function wrapAvatarWithRing(identity: AccountIdentity, options: WrapAvatarOptions): RingDecoration {
   const { anchor } = identity;
-  const size = options.size ?? identity.avatarImg.width ?? 20;
+  const size = options.size ?? (identity.avatarImg.width || 20);
   const outer = size + 8;
 
   const slot = document.createElement("span");
@@ -183,7 +183,8 @@ export function wrapAvatarWithRing(identity: AccountIdentity, options: WrapAvata
       anchor.style.display = "";
       anchor.style.alignItems = "";
       anchor.style.justifyContent = "";
-      slot.replaceWith(anchor);
+      // A slot GitHub already removed has no parent to restore into.
+      if (slot.isConnected) slot.replaceWith(anchor);
     },
   };
 }
