@@ -49,11 +49,11 @@ ghs_step "Browser extension archives"
 for browser in chrome firefox edge; do
   ghs_mise pnpm --filter @gh-stories/web-extension exec wxt zip -b "$browser" >/dev/null
 done
-find "$GHS_ROOT/apps/web-extension/.output" -maxdepth 1 -name '*.zip' -print0 |
-  while IFS= read -r -d '' zip; do
-    base="$(basename "$zip")"
-    cp "$zip" "$DIST/gh-stories-extension-${VERSION}-${base#*-}"
-  done
+# Stable, unversioned names so https://github.com/<repo>/releases/latest/download/<name> always works.
+for browser in chrome firefox edge; do
+  zip="$(find "$GHS_ROOT/apps/web-extension/.output" -maxdepth 1 -name "*-${browser}.zip" | head -1)"
+  [ -n "$zip" ] && cp "$zip" "$DIST/gh-stories-extension-${browser}.zip"
+done
 ls "$DIST" | grep -c '\.zip$' >/dev/null && ghs_ok "extension archives"
 
 ghs_step "Checksums"

@@ -48,7 +48,7 @@ export const VISIBILITY_LABELS: Record<NonNullable<Visibility>, string> = {
   author_follows: 'My followers',
   mutuals: 'Mutuals',
   custom_list: 'Custom list',
-  public: 'Public — anyone signed in',
+  public: 'Public — anyone, no sign-in required',
 };
 
 export const VISIBILITY_DESCRIPTIONS: Record<NonNullable<Visibility>, string> = {
@@ -56,7 +56,7 @@ export const VISIBILITY_DESCRIPTIONS: Record<NonNullable<Visibility>, string> = 
   author_follows: 'Only people who follow you on Stories can see this.',
   mutuals: 'Only people you follow who also follow you back can see this.',
   custom_list: 'Only the people on the list you choose can see this.',
-  public: 'Anyone signed in to GitHub Stories can see this.',
+  public: 'Anyone with the link can see this, even without signing in.',
 };
 
 /** How long every item stays visible, from the moment it is published. */

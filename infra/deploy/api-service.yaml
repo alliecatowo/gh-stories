@@ -58,6 +58,8 @@ spec:
         autoscaling.knative.dev/maxScale: "5"
         autoscaling.knative.dev/minScale: "0"
         run.googleapis.com/cpu-throttling: "true"
+        # Free; shortens cold starts after scale-to-zero.
+        run.googleapis.com/startup-cpu-boost: "true"
         run.googleapis.com/execution-environment: gen2
     spec:
       # Least privilege: this identity reads exactly the service's secrets

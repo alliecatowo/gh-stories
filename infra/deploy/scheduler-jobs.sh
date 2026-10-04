@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Cloud Scheduler trigger for the run-to-completion worker job.
 #
-# ONE schedule, every 15 minutes (3 Cloud Scheduler jobs per billing account
+# ONE schedule, every 6 hours (3 Cloud Scheduler jobs per billing account
 # are free; each extra costs $0.10/month). The worker is lease-based and
 # idempotent: each run does one cleanup pass (expiry, GC, retention purges,
 # physical object deletion) and drains any queued media jobs, then exits.
 # Uploads also start the job directly (the API calls jobs.run on finalize,
 # GHS_WORKER_TRIGGER_URL), so this sweep is the backstop for a missed trigger
-# and the cleanup pass. It stays at 15 minutes, not daily: physical deletion of
-# expired media targets 15 minutes (config PhysicalDeleteTarget). Do NOT add a
+# and the cleanup pass. Cost: every run wakes the serverless Neon database and
+# starts a container, so a 15-minute sweep kept both effectively always on.
+# Every 6 hours lets them idle to zero; expired Stories are already hidden at
+# read time, only physical object deletion lags (up to ~6h). Do NOT add a
 # 2-minute trigger: it multiplies container starts (and Secret Manager reads).
 #
 # Uses the scheduler service account with run.developer on the job only, so
@@ -46,4 +48,4 @@ create_or_keep() {
   echo "created scheduler job $name ($schedule)"
 }
 
-create_or_keep "gh-stories-worker-sweep" "7,22,37,52 * * * *" '{}'
+create_or_keep "gh-stories-worker-sweep" "7 */6 * * *" '{}'

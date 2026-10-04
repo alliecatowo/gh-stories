@@ -23,7 +23,7 @@ gcloud config set run/region "$GHS_REGION"
 
 Budget alert, scoped to this project, with an email notification (budgets do
 not cap charges; the manifests' max-instances, resource limits and the
-single 15-minute worker schedule are the real cost controls). A budget with
+single 6-hourly worker schedule are the real cost controls). A budget with
 no notification channel alerts nobody, so create the email channel first:
 
 ```bash
@@ -32,11 +32,11 @@ gcloud beta monitoring channels create --project="$GHS_GCP_PROJECT" \
   --channel-labels=email_address=YOU@example.com
 # note the returned channel name, then:
 gcloud billing budgets create --billing-account=BILLING_ACCOUNT_ID \
-  --display-name="gh-stories-prod $5 guard" \
+  --display-name="gh-stories-prod monthly \$5" \
   --filter-projects="projects/$GHS_GCP_PROJECT" \
   --budget-amount=5USD \
-  --threshold-rule=percent=0.5 --threshold-rule=percent=1.0 \
-  --threshold-rule=percent=1.0,basis=forecasted-spend \
+  --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 \
+  --threshold-rule=percent=1.0 \
   --all-updates-rule-monitoring-notification-channels="CHANNEL_NAME"
 ```
 
@@ -118,7 +118,7 @@ mise run deploy
 1. executes the `gh-stories-migrate` job and waits for success,
 2. deploys the API service,
 3. upserts the worker job (1 vCPU / 512Mi, 120s, no retries) and its single
-   15-minute scheduler trigger (the safety net and cleanup sweep; uploads
+   6-hourly scheduler trigger (the safety net and cleanup sweep; uploads
    also start the job directly, so media no longer waits for the sweep),
 4. verifies `/v1/health/ready` and an **authenticated** media round trip
    (metadata 200 + private `no-store`) using a token from
