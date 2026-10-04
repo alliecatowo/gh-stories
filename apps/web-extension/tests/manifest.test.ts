@@ -33,7 +33,7 @@ function load(dir: string): Manifest | null {
   return JSON.parse(readFileSync(file, 'utf8')) as Manifest;
 }
 
-const ALLOWED_PERMISSIONS = ['storage', 'tabs', 'alarms'];
+const ALLOWED_PERMISSIONS = ['storage', 'alarms'];
 
 /**
  * Host permissions live in different places per manifest version: MV3 has a
@@ -80,6 +80,16 @@ describe.each([
       expect(host, 'must never request access to all sites').not.toBe('<all_urls>');
       expect(host).not.toContain('*://*/*');
     }
+  });
+
+  it('points host permissions at the default service origin baked into the bundle', () => {
+    if (!manifest) return;
+    const service = hostPermissions(manifest).find((h) => h !== 'https://github.com/*');
+    expect(service, 'a service host permission is required').toBeTruthy();
+    const origin = (service as string).replace(/\/\*$/, '');
+    expect(origin).not.toContain('stories.example');
+    expect(origin).not.toContain('fly.dev');
+    expect(readFileSync(resolve(OUT, dir, 'background.js'), 'utf8')).toContain(origin);
   });
 
   it('only injects content scripts into GitHub', () => {

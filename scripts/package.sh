@@ -21,6 +21,13 @@ if [ -n "${GHS_DEFAULT_SERVICE_URL:-}" ]; then
   LDFLAGS="$LDFLAGS -X ${PKG}.DefaultServiceURL=${GHS_DEFAULT_SERVICE_URL}"
 fi
 
+if [ -n "${GITHUB_ACTIONS:-}" ] && [ -z "${GHS_DEFAULT_SERVICE_URL:-}" ]; then
+  echo "GHS_DEFAULT_SERVICE_URL must be set for release builds (extension and CLI share one service origin)." >&2
+  exit 1
+fi
+export GHS_VERSION="$VERSION"
+export GHS_SERVICE_ORIGIN="${GHS_SERVICE_ORIGIN:-${GHS_DEFAULT_SERVICE_URL:-}}"
+
 rm -rf "$DIST"; mkdir -p "$DIST"
 
 ghs_step "CLI binaries ($VERSION)"

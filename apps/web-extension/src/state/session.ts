@@ -8,7 +8,13 @@
  */
 import { browser } from "wxt/browser";
 
-export const DEFAULT_SERVICE_ORIGIN = "https://stories.example";
+/** Injected at build time from wxt.config.ts, the same value that sets the
+ * manifest host permission, so the two can never disagree. */
+declare const __GHS_SERVICE_ORIGIN__: string;
+export const DEFAULT_SERVICE_ORIGIN: string =
+  typeof __GHS_SERVICE_ORIGIN__ === "string"
+    ? __GHS_SERVICE_ORIGIN__
+    : "https://gh-stories-api-706402477894.us-central1.run.app";
 
 export interface StoredAccount {
   accountId: string;
