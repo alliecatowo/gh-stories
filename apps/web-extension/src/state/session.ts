@@ -53,6 +53,24 @@ async function setLocal(key: string, value: unknown): Promise<void> {
   await browser.storage.local.set({ [key]: value });
 }
 
+/** Origin-only https URL (http allowed for localhost development). */
+export function normalizeServiceOrigin(input: string): string {
+  let url: URL;
+  try {
+    url = new URL(input.trim());
+  } catch {
+    throw new Error("Service URL is not a valid URL.");
+  }
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) {
+    throw new Error("Service URL must use https.");
+  }
+  if ((url.pathname !== "/" && url.pathname !== "") || url.search || url.hash || url.username || url.password) {
+    throw new Error("Service URL must be an origin only (no path, query or credentials).");
+  }
+  return url.origin;
+}
+
 export async function getServiceOrigin(): Promise<string> {
   return getLocal(KEY_SERVICE_ORIGIN, DEFAULT_SERVICE_ORIGIN);
 }
@@ -61,9 +79,13 @@ export async function getServiceOrigin(): Promise<string> {
  * entirely — any cached tokens belong to the old one, so every account is
  * signed out and every cache is implicitly stale. */
 export async function setServiceOrigin(origin: string): Promise<void> {
-  const normalized = origin.replace(/\/+$/, "");
-  await setLocal(KEY_SERVICE_ORIGIN, normalized);
+  const normalized = normalizeServiceOrigin(origin);
+  // Drop credentials and any pending login BEFORE switching, so an in-flight
+  // request can never send the old bearer token (or poll secret) to the new
+  // origin.
   await clearAllAccounts();
+  await setLocal(KEY_PENDING_LOGIN, null);
+  await setLocal(KEY_SERVICE_ORIGIN, normalized);
 }
 
 export async function getAccounts(): Promise<AccountMap> {

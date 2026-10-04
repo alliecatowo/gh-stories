@@ -68,3 +68,24 @@ describe('runtime message sender validation', () => {
     ).toBe(false);
   });
 });
+
+describe('Firefox extension origins', () => {
+  const FF_ORIGIN = 'moz-extension://5b1d7a3e-1111-4c2b-9d00-0123456789ab';
+  const ADDON_ID = 'gh-stories@alliecatowo.github.io';
+
+  it('accepts popup/options pages by runtime.getURL origin, not the add-on id', () => {
+    expect(
+      isTrustedSender({ id: ADDON_ID, url: `${FF_ORIGIN}/popup.html` } as never, ADDON_ID, FF_ORIGIN),
+    ).toBe(true);
+  });
+
+  it('rejects another moz-extension origin', () => {
+    expect(
+      isTrustedSender(
+        { id: ADDON_ID, url: 'moz-extension://other-uuid/popup.html' } as never,
+        ADDON_ID,
+        FF_ORIGIN,
+      ),
+    ).toBe(false);
+  });
+});

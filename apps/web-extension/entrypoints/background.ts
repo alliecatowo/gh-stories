@@ -24,10 +24,18 @@ import {
 } from "../src/state/session.js";
 import { pollLoginOnce, startLogin } from "../src/state/login.js";
 import { RingStatusRegistry, clearAllRingCache, purgeAccountRingCache } from "../src/state/ringCache.js";
-import { isTrustedPort, isTrustedSender } from "../src/messaging/sender.js";
+import { isTrustedPort, senderKind } from "../src/messaging/sender.js";
+import { isMessageAllowed } from "../src/messaging/policy.js";
 import { isRuntimeRequest, isUploadStartMessage, isUploadCancelMessage } from "../src/messaging/guards.js";
 import { PORT_UPLOAD } from "../src/messaging/types.js";
 import type { RuntimeRequest, RuntimeResponse, SessionState, WireError } from "../src/messaging/types.js";
+
+/** `chrome-extension://<id>` or `moz-extension://<per-install-uuid>`; the
+ * latter is NOT the add-on id, so it must come from getURL. */
+function ownOrigin(): string {
+  const url = new URL((browser.runtime as unknown as { getURL(path: string): string }).getURL("/"));
+  return `${url.protocol}//${url.host}`;
+}
 
 const ALARM_LOGIN_POLL = "ghs:poll-login";
 
@@ -37,6 +45,19 @@ function toWireError(error: unknown): WireError {
 }
 
 export default defineBackground(() => {
+  // Bearer tokens live in storage.local. By default content scripts can read
+  // it; restrict it to trusted contexts (background, popup, options). Not
+  // supported on every browser, so failure must not break startup.
+  try {
+    void Promise.resolve(
+      (browser.storage.local as unknown as {
+        setAccessLevel?: (o: { accessLevel: string }) => Promise<void>;
+      }).setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" }),
+    ).catch(() => undefined);
+  } catch {
+    /* unsupported (Firefox): content scripts there cannot read storage.local of the background anyway */
+  }
+
   const apiClient = new ApiClient({ getToken, getServiceOrigin });
   const ringRegistry = new RingStatusRegistry(apiClient, getActiveAccountId);
 
@@ -174,7 +195,9 @@ export default defineBackground(() => {
           await apiClient.acknowledgeView(message.storyId);
           return { ok: true, data: { acknowledged: true } };
         case "ghs:story/react": {
-          const idempotencyKey = `${message.storyId}:${message.emoji ?? "clear"}`;
+          // A random per-attempt key: never user content (emoji or reply text
+          // is not a valid HTTP header value).
+          const idempotencyKey = crypto.randomUUID();
           if (message.emoji) {
             await apiClient.setReaction(message.storyId, message.emoji, idempotencyKey);
           } else {
@@ -183,7 +206,7 @@ export default defineBackground(() => {
           return { ok: true, data: { storyId: message.storyId, emoji: message.emoji } };
         }
         case "ghs:story/reply": {
-          const idempotencyKey = `reply:${message.storyId}:${message.body}`;
+          const idempotencyKey = crypto.randomUUID();
           await apiClient.reply(message.storyId, message.body, idempotencyKey);
           return { ok: true, data: { sent: true } };
         }
@@ -274,8 +297,13 @@ export default defineBackground(() => {
 
   browser.runtime.onMessage.addListener(
     (message: unknown, sender: Browser.runtime.MessageSender, sendResponse: (response: RuntimeResponse) => void) => {
-      if (!isTrustedSender(sender, browser.runtime.id)) return undefined;
+      const kind = senderKind(sender, browser.runtime.id, ownOrigin());
+      if (!kind) return undefined;
       if (!isRuntimeRequest(message)) return undefined;
+      if (!isMessageAllowed(message, kind)) {
+        sendResponse({ ok: false, error: { code: "forbidden", message: "Not allowed from this context." } });
+        return undefined;
+      }
       void handleRequest(message, sender).then(sendResponse);
       return true; // keep the message channel open for the async response
     },
@@ -283,7 +311,7 @@ export default defineBackground(() => {
 
   browser.runtime.onConnect.addListener((port: Browser.runtime.Port) => {
     if (port.name !== PORT_UPLOAD) return;
-    if (!isTrustedPort(port, browser.runtime.id)) {
+    if (!isTrustedPort(port, browser.runtime.id, ownOrigin())) {
       port.disconnect();
       return;
     }
