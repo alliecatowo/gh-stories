@@ -42,13 +42,61 @@ export async function startLogin(origin: string): Promise<LoginPollResponseData>
   const pending = await createPendingLogin(origin);
   await setPendingLogin(pending);
   await browser.tabs.create({ url: pending.verificationUrl, active: true });
-  return { status: "pending", verificationUrl: pending.verificationUrl, userCode: pending.userCode };
+  return pendingResult(pending);
 }
 
-/** Polls once. Safe to call repeatedly (from the popup on a short interval,
- * and from the durable alarm backstop) — it always reflects current
- * storage state and never double-registers an account. */
-export async function pollLoginOnce(origin: string): Promise<LoginPollResponseData> {
+const MIN_INTERVAL_S = 2;
+const MAX_INTERVAL_S = 30;
+
+function pendingResult(pending: PendingLogin): LoginPollResponseData {
+  const seconds = Math.min(MAX_INTERVAL_S, Math.max(MIN_INTERVAL_S, pending.intervalSeconds || MIN_INTERVAL_S));
+  return {
+    status: "pending",
+    verificationUrl: pending.verificationUrl,
+    userCode: pending.userCode,
+    intervalSeconds: seconds,
+  };
+}
+
+let inFlightPoll: Promise<LoginPollResponseData> | null = null;
+
+/** Polls once. Safe to call repeatedly and concurrently (the popup, the
+ * background loop and the alarm backstop all call it): overlapping calls
+ * share one in-flight request, so an approved login can never be consumed
+ * twice or register the account twice. */
+export function pollLoginOnce(origin: string): Promise<LoginPollResponseData> {
+  if (!inFlightPoll) {
+    inFlightPoll = pollLoginOnceUnlocked(origin).finally(() => {
+      inFlightPoll = null;
+    });
+  }
+  return inFlightPoll;
+}
+
+let loopRunning = false;
+
+/** Background-owned poll loop: keeps polling at the interval the service asked
+ * for until the login resolves, whether or not the popup is still open. Only
+ * one loop runs at a time. If the service worker is evicted, the alarm
+ * backstop and the next startup resume it. */
+export async function runLoginLoop(
+  origin: string,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<LoginPollResponseData> {
+  if (loopRunning) return pollLoginOnce(origin);
+  loopRunning = true;
+  try {
+    for (;;) {
+      const result = await pollLoginOnce(origin).catch((): LoginPollResponseData => ({ status: "pending" }));
+      if (result.status !== "pending") return result;
+      await sleep((result.intervalSeconds ?? MIN_INTERVAL_S) * 1000);
+    }
+  } finally {
+    loopRunning = false;
+  }
+}
+
+async function pollLoginOnceUnlocked(origin: string): Promise<LoginPollResponseData> {
   const pending = await getPendingLogin();
   if (!pending) return { status: "idle" };
 
@@ -69,12 +117,12 @@ export async function pollLoginOnce(origin: string): Promise<LoginPollResponseDa
     }
     // Transient failure (rate limited, network blip): keep the pending
     // login around so the next poll can retry.
-    return { status: "pending", verificationUrl: pending.verificationUrl, userCode: pending.userCode };
+    return pendingResult(pending);
   }
 
   const body = (await response.json()) as PendingLoginPoll;
   if (body.status === "pending") {
-    return { status: "pending", verificationUrl: pending.verificationUrl, userCode: pending.userCode };
+    return pendingResult(pending);
   }
   if (body.status === "denied" || body.status === "expired") {
     await setPendingLogin(null);

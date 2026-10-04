@@ -178,7 +178,12 @@ test.describe('browser extension', () => {
       // real GitHub avatar has to remain visible through its hollow centre.
       const hidden = await page.evaluate(() => {
         const bad: string[] = [];
-        document.querySelectorAll('.ghs-avatar-slot img').forEach((img) => {
+        document.querySelectorAll('ghs-ring-overlay').forEach((host) => {
+          const img = host.previousElementSibling?.querySelector('img.avatar');
+          if (!img) {
+            bad.push('ring host is not next to a GitHub avatar link');
+            return;
+          }
           const el = img as HTMLElement;
           const box = el.getBoundingClientRect();
           const cs = getComputedStyle(el);
@@ -193,14 +198,26 @@ test.describe('browser extension', () => {
       // Clicking the avatar must still reach GitHub's own profile link: the
       // ring is decoration, and the overlay must not intercept the hit test.
       const hit = await page.evaluate(() => {
-        const slot = document.querySelector('.ghs-avatar-slot');
-        if (!slot) return 'no slot';
-        const b = slot.getBoundingClientRect();
+        const ring = document.querySelector('ghs-ring-overlay');
+        if (!ring) return 'no ring';
+        const b = ring.getBoundingClientRect();
         const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
         if (!top) return 'none';
         return top.closest('a')?.getAttribute('href') ?? top.tagName.toLowerCase();
       });
       expect(hit, `the ring overlay is swallowing clicks (hit ${hit})`).toMatch(/^\//);
+
+      // The ring must sit exactly over its avatar (it is measured, not slotted).
+      const offsets = await page.evaluate(() =>
+        [...document.querySelectorAll('ghs-ring-overlay')].map((host) => {
+          const img = host.previousElementSibling?.querySelector('img.avatar');
+          if (!img) return 999;
+          const h = host.getBoundingClientRect();
+          const i = img.getBoundingClientRect();
+          return Math.max(Math.abs(h.left + h.width / 2 - (i.left + i.width / 2)), Math.abs(h.top + h.height / 2 - (i.top + i.height / 2)));
+        }),
+      );
+      expect(Math.max(...offsets), 'rings must be centred on their avatars').toBeLessThanOrEqual(1.5);
 
       await shot(page, 'extension-pr-rings');
 
@@ -210,7 +227,7 @@ test.describe('browser extension', () => {
       const botDecorated = await page.evaluate(() => {
         const botImg = document.querySelector('a[href="/apps/dependabot"] img');
         if (!botImg) return false;
-        return botImg.closest('.ghs-avatar-slot') != null;
+        return botImg.closest('a')?.nextElementSibling?.tagName === 'GHS-RING-OVERLAY';
       });
       expect(botDecorated, 'a bot/app avatar must never get a Story ring').toBe(false);
     } finally {
@@ -238,8 +255,8 @@ test.describe('browser extension', () => {
         const el = document.querySelector('#late-comment-anchor');
         return el ? Math.round(el.getBoundingClientRect().top) : -1;
       });
-      // Rings reserve their width whether or not one is shown, so comment
-      // layout must not move.
+      // Rings are absolutely positioned overlays that take no layout space,
+      // so comment layout must not move.
       expect(Math.abs(after - before), 'decorating avatars must not shift layout').toBeLessThanOrEqual(2);
 
       // The username link still navigates normally.
@@ -275,13 +292,12 @@ test.describe('browser extension', () => {
       expect(second, 'a late comment should be decorated').toBeGreaterThanOrEqual(first);
 
       // Re-running the observer must not double-decorate anything.
-      // Each decorated avatar sits inside exactly one slot with exactly one
-      // ring overlay. More than one means the observer decorated it twice.
+      // Each decorated avatar has exactly one ring overlay beside its link.
+      // Two adjacent hosts mean the observer decorated it twice.
       const duplicates = await page.evaluate(() => {
         let dupes = 0;
-        document.querySelectorAll('.ghs-avatar-slot').forEach((slot) => {
-          if (slot.querySelectorAll('ghs-ring-overlay').length > 1) dupes++;
-          if (slot.querySelectorAll('img.avatar').length > 1) dupes++;
+        document.querySelectorAll('ghs-ring-overlay').forEach((host) => {
+          if (host.nextElementSibling?.tagName === 'GHS-RING-OVERLAY') dupes++;
         });
         return dupes;
       });

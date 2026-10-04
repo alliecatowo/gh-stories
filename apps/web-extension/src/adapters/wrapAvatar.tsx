@@ -1,31 +1,30 @@
 /**
- * Wraps one GitHub avatar with a Story ring, without ever nesting a new
- * interactive element inside GitHub's own `<a>`. GitHub's avatar is almost
- * always already inside a profile link; putting a `<button>` inside that
- * link would be invalid HTML and would break the link's own click target.
+ * Draws one Story ring over a GitHub avatar WITHOUT touching GitHub's DOM.
  *
- * Strategy:
- *  - Reserve a fixed-size `slot` matching the ring's full footprint
- *    (avatar size + ring width/gap) and reparent GitHub's original
- *    `<a><img></a>` into it, completely untouched — same listeners, same
- *    `data-hovercard-*` attributes, same href, same keyboard focus order.
- *  - Render `StoryRing` as a purely decorative overlay on top
- *    (`pointer-events: none`, and its own inner `<img>` hidden so GitHub's
- *    real avatar shows through the ring's hollow center) — every click
- *    still reaches GitHub's link normally, including modified clicks.
- *  - Add one small activation badge as a SIBLING of GitHub's anchor (never
- *    inside it) with its own `aria-label`, which is the only additional
- *    interactive element this module introduces.
+ * GitHub's avatar is almost always inside a profile link, and GitHub's own
+ * (React-managed) markup must never be moved or restyled: reparenting its
+ * nodes breaks its reconciliation and Turbo navigation. So:
+ *  - The ring lives in a Shadow DOM host inserted as a SIBLING right after
+ *    GitHub's link, `position:absolute` and `pointer-events:none`, then
+ *    translated so it sits exactly over the avatar (measured, so it does not
+ *    care which ancestor is the containing block). It takes no layout space,
+ *    so nothing on the page shifts.
+ *  - The ring itself renders through one shared React root (see
+ *    `mount/ringLayer.tsx`), not a root per avatar.
+ *  - The only interactive element added is one small activation badge, a
+ *    sibling of (never inside) GitHub's link, with its own `aria-label`.
  */
 import type { MouseEvent } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { StoryRing, type StoryRingState } from "@gh-stories/ui";
 import { createShadowMount } from "../mount/shadow.js";
 import { observeGithubTheme } from "../mount/theme.js";
+import { mountRingPortal } from "../mount/ringLayer.js";
 import type { AccountIdentity } from "./identity.js";
 
 export interface RingDecoration {
   update(state: StoryRingState, hasStory: boolean): void;
+  /** Re-inserts the ring host if GitHub's re-render dropped it. */
+  reattach(): void;
   destroy(): void;
 }
 
@@ -98,34 +97,116 @@ const OVERLAY_CSS = `
 .ghs-ring-overlay-badge[data-state="muted"] { background: var(--ghs-ring-muted, #8c959f); }
 `;
 
+const RING_PAD = 4;
+const FALLBACK_SIZE = 20;
+
+/** Avatar diameter: explicit option, else the rendered box, else the
+ * intrinsic `width` (0 while unloaded, hence `||`, not `??`), else a default. */
+export function measureAvatarSize(img: HTMLImageElement, explicit?: number): number {
+  if (explicit && explicit > 0) return explicit;
+  const rendered = img.getBoundingClientRect().width;
+  return Math.round(rendered || img.width || FALLBACK_SIZE) || FALLBACK_SIZE;
+}
+
+// ---- positioning: one rAF-batched pass, reads before writes ------------
+interface Positioner {
+  host: HTMLElement;
+  img: HTMLImageElement;
+  outer: () => number;
+}
+const positioners = new Set<Positioner>();
+let frame = 0;
+let listening = false;
+let resizeObserver: ResizeObserver | null = null;
+const observedBy = new Map<Element, number>();
+
+function layoutAll(): void {
+  frame = 0;
+  const reads: Array<{ p: Positioner; dx: number; dy: number }> = [];
+  for (const p of positioners) {
+    if (!p.host.isConnected || !p.img.isConnected) continue;
+    // Measure with the transform cleared so the host's static position is the
+    // reference point, whatever the containing block is.
+    p.host.style.transform = "none";
+  }
+  for (const p of positioners) {
+    if (!p.host.isConnected || !p.img.isConnected) continue;
+    const img = p.img.getBoundingClientRect();
+    const host = p.host.getBoundingClientRect();
+    reads.push({
+      p,
+      dx: img.left + img.width / 2 - p.outer() / 2 - host.left,
+      dy: img.top + img.height / 2 - p.outer() / 2 - host.top,
+    });
+  }
+  for (const { p, dx, dy } of reads) {
+    p.host.style.transform = `translate(${Math.round(dx * 100) / 100}px, ${Math.round(dy * 100) / 100}px)`;
+    p.host.style.visibility = p.img.getBoundingClientRect().width === 0 ? "hidden" : "";
+  }
+}
+
+/** Re-measures every ring on the next frame (call after layout may have moved). */
+export function scheduleRingLayout(): void {
+  if (frame || positioners.size === 0) return;
+  frame = requestAnimationFrame(layoutAll);
+}
+
+function observe(el: Element): void {
+  observedBy.set(el, (observedBy.get(el) ?? 0) + 1);
+  resizeObserver?.observe(el);
+}
+function unobserve(el: Element): void {
+  const n = (observedBy.get(el) ?? 1) - 1;
+  if (n > 0) {
+    observedBy.set(el, n);
+    return;
+  }
+  observedBy.delete(el);
+  resizeObserver?.unobserve(el);
+}
+
+function startListening(): void {
+  if (listening) return;
+  listening = true;
+  window.addEventListener("resize", scheduleRingLayout);
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(scheduleRingLayout);
+    for (const el of observedBy.keys()) resizeObserver.observe(el);
+    // Layout shifts of the whole page (content above growing) move every ring.
+    resizeObserver.observe(document.documentElement);
+  }
+}
+function stopListening(): void {
+  if (!listening) return;
+  listening = false;
+  window.removeEventListener("resize", scheduleRingLayout);
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  if (frame) cancelAnimationFrame(frame);
+  frame = 0;
+}
+
 export function wrapAvatarWithRing(identity: AccountIdentity, options: WrapAvatarOptions): RingDecoration {
-  const { anchor } = identity;
-  const size = options.size ?? (identity.avatarImg.width || 20);
-  const outer = size + 8;
-
-  const slot = document.createElement("span");
-  slot.className = "ghs-avatar-slot";
-  slot.style.cssText = `position:relative; display:inline-block; width:${outer}px; height:${outer}px; line-height:0; vertical-align:middle;`;
-
-  const originalAnchorPosition = anchor.style.position;
-  anchor.replaceWith(slot);
-  slot.appendChild(anchor);
-  anchor.style.position = "absolute";
-  anchor.style.inset = "0";
-  anchor.style.display = "flex";
-  anchor.style.alignItems = "center";
-  anchor.style.justifyContent = "center";
+  const { anchor, avatarImg } = identity;
+  const size = measureAvatarSize(avatarImg, options.size);
+  const outer = size + 2 * RING_PAD;
 
   const mount = createShadowMount({ tagName: "ghs-ring-overlay", extraCss: OVERLAY_CSS });
   // pointer-events:none on the HOST itself, not just on the root inside the
   // shadow: the host covers the whole avatar, so with default pointer events
   // it silently swallows every click, modified-click and context-menu meant
   // for GitHub's profile link. The badge re-enables pointer events for itself.
-  mount.host.style.cssText = "position:absolute; inset:0; pointer-events:none;";
-  slot.appendChild(mount.host);
+  mount.host.style.cssText = `position:absolute; pointer-events:none; width:${outer}px; height:${outer}px; margin:0; padding:0; border:0; z-index:1;`;
+  mount.host.dataset.ghsLogin = identity.login;
+  anchor.insertAdjacentElement("afterend", mount.host);
   const stopTheme = observeGithubTheme(mount.host);
 
-  const root: Root = createRoot(mount.container);
+  const positioner: Positioner = { host: mount.host, img: avatarImg, outer: () => outer };
+  positioners.add(positioner);
+  startListening();
+  observe(avatarImg);
+  scheduleRingLayout();
+
   let state = options.initialState;
   let hasStory = options.hasStory;
 
@@ -135,8 +216,8 @@ export function wrapAvatarWithRing(identity: AccountIdentity, options: WrapAvata
     options.onActivate();
   }
 
-  function render() {
-    root.render(
+  function view() {
+    return (
       <div className="ghs-root ghs-ring-overlay-root">
         <StoryRing
           src={identity.avatarUrl}
@@ -163,28 +244,34 @@ export function wrapAvatarWithRing(identity: AccountIdentity, options: WrapAvata
             onClick={handleBadgeClick}
           />
         ) : null}
-      </div>,
+      </div>
     );
   }
-  render();
+
+  const portal = mountRingPortal(mount.container, view());
+  let destroyed = false;
 
   return {
     update(nextState, nextHasStory) {
+      if (destroyed) return;
       state = nextState;
       hasStory = nextHasStory;
-      render();
+      portal.update(view());
+    },
+    reattach() {
+      if (destroyed || mount.host.isConnected || !anchor.isConnected) return;
+      anchor.insertAdjacentElement("afterend", mount.host);
+      scheduleRingLayout();
     },
     destroy() {
+      if (destroyed) return;
+      destroyed = true;
       stopTheme();
-      root.unmount();
+      portal.remove();
+      positioners.delete(positioner);
+      unobserve(avatarImg);
+      if (positioners.size === 0) stopListening();
       mount.destroy();
-      anchor.style.position = originalAnchorPosition;
-      anchor.style.inset = "";
-      anchor.style.display = "";
-      anchor.style.alignItems = "";
-      anchor.style.justifyContent = "";
-      // A slot GitHub already removed has no parent to restore into.
-      if (slot.isConnected) slot.replaceWith(anchor);
     },
   };
 }

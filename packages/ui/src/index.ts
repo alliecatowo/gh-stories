@@ -4,6 +4,7 @@ export {
   StoryComposer,
   type StoryComposerProps,
   type StoryComposerDefaults,
+  type ComposerSubmitHelpers,
 } from "./StoryComposer.js";
 export { StoryRow, type StoryRowProps, type StoryRowOwn } from "./StoryRow.js";
 export { Inbox, type InboxProps } from "./Inbox.js";

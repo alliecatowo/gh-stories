@@ -22,7 +22,7 @@ import {
   removeAccount,
   setServiceOrigin,
 } from "../src/state/session.js";
-import { pollLoginOnce, startLogin } from "../src/state/login.js";
+import { pollLoginOnce, runLoginLoop, startLogin } from "../src/state/login.js";
 import { RingStatusRegistry, clearAllRingCache, purgeAccountRingCache } from "../src/state/ringCache.js";
 import { isTrustedPort, senderKind } from "../src/messaging/sender.js";
 import { isMessageAllowed } from "../src/messaging/policy.js";
@@ -58,7 +58,11 @@ export default defineBackground(() => {
     /* unsupported (Firefox): content scripts there cannot read storage.local of the background anyway */
   }
 
-  const apiClient = new ApiClient({ getToken, getServiceOrigin });
+  const apiClient = new ApiClient({
+    getToken,
+    getServiceOrigin,
+    onUnauthorized: (token) => dropAccountForToken(token),
+  });
   const ringRegistry = new RingStatusRegistry(apiClient, getActiveAccountId);
 
   async function currentSessionState(): Promise<SessionState> {
@@ -94,6 +98,20 @@ export default defineBackground(() => {
     purgeAccountRingCache(targetId);
   }
 
+  /** The service said this token is no longer valid: remove that account (and
+   * its cached ring state) so the UI shows signed-out instead of failing
+   * every call. Matching by token keeps a stale in-flight request from
+   * removing an account the user has since switched to. */
+  async function dropAccountForToken(token: string): Promise<void> {
+    const accounts = await getAccounts();
+    for (const account of Object.values(accounts)) {
+      if (account.token !== token) continue;
+      await removeAccount(account.accountId);
+      purgeAccountRingCache(account.accountId);
+    }
+    clearAllRingCache();
+  }
+
   // ---------------------------------------------------------- alarm backstop
   function ensureLoginAlarm(): void {
     browser.alarms.create(ALARM_LOGIN_POLL, { periodInMinutes: 1 });
@@ -103,11 +121,23 @@ export default defineBackground(() => {
     void (async () => {
       const origin = await getServiceOrigin();
       const result = await pollLoginOnce(origin).catch((): null => null);
-      if (!result || result.status !== "pending") {
+      if (result?.status === "pending") {
+        void runLoginLoop(origin).catch(() => undefined);
+      } else {
         await browser.alarms.clear(ALARM_LOGIN_POLL);
       }
     })();
   });
+
+  // A service worker restart mid-login: resume polling a pending login.
+  void (async () => {
+    const origin = await getServiceOrigin();
+    const result = await pollLoginOnce(origin).catch((): null => null);
+    if (result?.status === "pending") {
+      ensureLoginAlarm();
+      void runLoginLoop(origin).catch(() => undefined);
+    }
+  })();
 
   /**
    * Encodes media bytes for transport to a page context.
@@ -139,6 +169,9 @@ export default defineBackground(() => {
           const origin = await getServiceOrigin();
           const data = await startLogin(origin);
           ensureLoginAlarm();
+          // The background owns the polling so sign-in completes even if the
+          // popup is closed while the approval tab is open.
+          void runLoginLoop(origin).catch(() => undefined);
           return { ok: true, data };
         }
         case "ghs:session/login-poll": {
@@ -261,6 +294,9 @@ export default defineBackground(() => {
           await byAction[message.action]();
           return { ok: true, data: { login: message.login, action: message.action } };
         }
+
+        case "ghs:graph/following":
+          return { ok: true, data: { following: await apiClient.isFollowing(message.login) } };
 
         case "ghs:settings/revoke-session":
           await apiClient.revokeSession(message.sessionId);

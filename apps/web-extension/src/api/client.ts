@@ -39,6 +39,10 @@ export interface ApiClientDeps {
   /** Base origin of the Stories service, e.g. "https://stories.example" or
    * a self-hoster's own deployment. Never includes a trailing slash. */
   getServiceOrigin(): Promise<string>;
+  /** Called when the service rejects a token it was actually sent (HTTP 401):
+   * the session is dead, so the caller should drop that account and its
+   * caches instead of retrying with it forever. */
+  onUnauthorized?(token: string): Promise<void> | void;
 }
 
 interface RequestOptions {
@@ -82,12 +86,14 @@ export class ApiClient {
     }
 
     const headers: Record<string, string> = {};
+    let sentToken: string | null = null;
     if (options.body !== undefined) headers["content-type"] = "application/json";
     if (options.idempotencyKey) headers["idempotency-key"] = options.idempotencyKey;
     if (!options.anonymous) {
       const token = options.token ?? (await this.deps.getToken());
       if (!token) throw ApiClientError.unauthenticated();
       headers.authorization = `Bearer ${token}`;
+      sentToken = token;
     }
 
     const controller = new AbortController();
@@ -122,6 +128,13 @@ export class ApiClient {
     }
 
     if (!response.ok) {
+      if (response.status === 401 && sentToken) {
+        try {
+          await this.deps.onUnauthorized?.(sentToken);
+        } catch {
+          /* clean-up is best effort; the caller still sees "signed out" */
+        }
+      }
       throw await this.toApiError(response);
     }
 
@@ -275,6 +288,24 @@ export class ApiClient {
       body: { subject_kind: input.subjectKind, story_id: input.storyId, login: input.login, reason: input.reason, details: input.details },
       signal,
     });
+  }
+
+  /** Whether the caller follows `login` on Stories. There is no single-user
+   * lookup, so this walks the (cursor-paged) following list, bounded. */
+  async isFollowing(login: string, signal?: AbortSignal): Promise<boolean> {
+    const wanted = login.toLowerCase();
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page++) {
+      const result = await this.request<{ relationships?: Array<{ user?: { login?: string } }>; next_cursor?: string }>({
+        path: "/following",
+        query: { cursor, limit: 200 },
+        signal,
+      });
+      if (result.relationships?.some((r) => r.user?.login?.toLowerCase() === wanted)) return true;
+      if (!result.next_cursor) return false;
+      cursor = result.next_cursor;
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------- media

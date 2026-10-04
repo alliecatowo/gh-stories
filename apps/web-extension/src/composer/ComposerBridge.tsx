@@ -11,12 +11,13 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { StoryComposer, type StoryComposerDefaults } from "@gh-stories/ui";
-import type { AudienceOption, ComposerDraft } from "@gh-stories/ui";
+import type { AudienceOption, ComposerDraft, ComposerSubmitHelpers } from "@gh-stories/ui";
 import type { Settings } from "@gh-stories/contracts";
 import { VISIBILITY_LABELS } from "@gh-stories/contracts";
 import { browser } from "wxt/browser";
 import { callBackground } from "../messaging/client.js";
-import { PORT_UPLOAD, type UploadServerMessage, type UploadStartMessage } from "../messaging/types.js";
+import { PORT_UPLOAD, type UploadStartMessage } from "../messaging/types.js";
+import { runUploadOverPort, type UploadPortLike } from "./uploadPort.js";
 
 function audiencesFromSettings(settings: Settings | null): AudienceOption[] {
   const base: AudienceOption[] = (["followers_of_author", "author_follows", "mutuals", "public"] as const).map(
@@ -68,7 +69,7 @@ export function ComposerBridge(props: ComposerBridgeProps): React.JSX.Element | 
     allowReactions: settings?.default_allow_reactions ?? true,
   };
 
-  async function submit(draft: ComposerDraft): Promise<void> {
+  async function submit(draft: ComposerDraft, helpers: ComposerSubmitHelpers): Promise<void> {
     const buffer = await draft.file.arrayBuffer();
     // Ports serialise with JSON, so the bytes travel as base64. Chunked,
     // because a spread over a video-sized array blows the call stack.
@@ -95,26 +96,9 @@ export function ComposerBridge(props: ComposerBridgeProps): React.JSX.Element | 
       base64,
     };
 
-    await new Promise<void>((resolve, reject) => {
-      const port = browser.runtime.connect({ name: PORT_UPLOAD });
-      port.onMessage.addListener((raw: unknown) => {
-        const msg = raw as UploadServerMessage;
-        if (msg.type === "done") {
-          idempotencyKeyRef.current = null;
-          port.disconnect();
-          resolve();
-        } else if (msg.type === "error") {
-          port.disconnect();
-          reject(new Error(msg.error.message));
-        } else if (msg.type === "cancelled") {
-          port.disconnect();
-          reject(new Error("Upload cancelled."));
-        }
-        // "progress" / "phase" ticks: StoryComposer owns its own internal
-        // ramp/processing UI and has no external progress prop to feed.
-      });
-      port.postMessage(start);
-    });
+    const port = browser.runtime.connect({ name: PORT_UPLOAD });
+    await runUploadOverPort(port as unknown as UploadPortLike, start, helpers.reportProgress);
+    idempotencyKeyRef.current = null;
   }
 
   return (

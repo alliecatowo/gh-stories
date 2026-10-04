@@ -65,6 +65,8 @@ export interface LoginPollResponseData {
   status: "idle" | "pending" | "approved" | "denied" | "expired";
   verificationUrl?: string;
   userCode?: string;
+  /** Seconds the service asked clients to wait between polls. */
+  intervalSeconds?: number;
 }
 export interface LogoutRequest {
   type: "ghs:session/logout";
@@ -184,6 +186,11 @@ export interface GraphActionRequest {
   login: string;
 }
 
+export interface FollowingStateRequest {
+  type: "ghs:graph/following";
+  login: string;
+}
+
 export interface SessionRevokeRequest {
   type: "ghs:settings/revoke-session";
   sessionId: string;
@@ -243,6 +250,7 @@ export type RuntimeRequest =
   | AudienceListDeleteRequest
   | AudienceListRemoveMemberRequest
   | GraphActionRequest
+  | FollowingStateRequest
   | SessionRevokeRequest
   | SignOutAllRequest
   | AccountDeleteRequest
@@ -277,6 +285,7 @@ export interface RuntimeResponseDataMap {
   "ghs:audience/delete": Settings;
   "ghs:audience/remove-member": Settings;
   "ghs:graph/action": { login: string; action: string };
+  "ghs:graph/following": { following: boolean };
   "ghs:settings/revoke-session": { revoked: true };
   "ghs:settings/sign-out-all": { signedOut: true };
   "ghs:settings/delete-account": { deleted: true };

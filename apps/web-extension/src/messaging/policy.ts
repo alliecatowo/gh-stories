@@ -24,6 +24,7 @@ const CONTENT_SCRIPT_TYPES: ReadonlySet<string> = new Set([
   "ghs:media/fetch",
   "ghs:settings/get",
   "ghs:graph/action",
+  "ghs:graph/following",
 ]);
 
 /** Graph actions a content script (profile "Follow on Stories") may take. */
