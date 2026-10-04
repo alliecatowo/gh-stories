@@ -228,14 +228,25 @@ export function StoryViewer(props: StoryViewerProps): React.JSX.Element {
   // Keyboard controls. Ignored (except Escape) while a text field has focus.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      const active = document.activeElement;
-      const typing = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+      // Inside a shadow root `document.activeElement` is retargeted to the
+      // host, and so is `event.target`; the real target is first in the
+      // composed path.
+      const origin = event.composedPath()[0];
+      const typing =
+        origin instanceof HTMLInputElement ||
+        origin instanceof HTMLTextAreaElement ||
+        (origin instanceof HTMLElement && origin.isContentEditable);
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         close();
         return;
       }
       if (typing) return;
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft" || event.key === " ") {
+        // Keep GitHub's own single-key hotkeys from also seeing these.
+        event.stopPropagation();
+      }
       if (event.key === "ArrowRight") {
         event.preventDefault();
         goNext();
@@ -247,8 +258,9 @@ export function StoryViewer(props: StoryViewerProps): React.JSX.Element {
         setManualPause((paused) => !paused);
       }
     }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    // Capture phase so we run before GitHub's document-level hotkey handlers.
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   });
 
   function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -310,7 +322,16 @@ export function StoryViewer(props: StoryViewerProps): React.JSX.Element {
   const nowMs = Date.now() + serverTimeOffsetMs;
 
   const content = (
-    <div className="ghs-root ghs-viewer" role="dialog" aria-modal="true" aria-label="Story viewer">
+    <div
+      className="ghs-root ghs-viewer"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Story viewer"
+      // Typed characters belong to the viewer, not to GitHub's hotkeys.
+      onKeyDown={(event) => event.stopPropagation()}
+      onKeyUp={(event) => event.stopPropagation()}
+      onKeyPress={(event) => event.stopPropagation()}
+    >
       <div className="ghs-viewer__backdrop" />
       <div
         className="ghs-viewer__frame"

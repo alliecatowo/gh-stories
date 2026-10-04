@@ -20,35 +20,52 @@ const GITHUB_ORIGIN = "https://github.com";
  * rejected — the content script is only ever registered for
  * `https://github.com/*`, but we do not trust that registration alone.
  */
-export function isTrustedSender(
+export type SenderKind = "extension-page" | "content-script";
+
+/**
+ * Classifies a sender, or returns null when it must not be trusted.
+ *
+ * `ownOrigin` is `new URL(runtime.getURL("/")).origin`. On Chromium it is
+ * `chrome-extension://<id>`, but on Firefox it is `moz-extension://<random
+ * per-install uuid>`, which is not `runtime.id`; comparing against the id
+ * rejects every popup/options message there. When omitted it falls back to
+ * the Chromium form derived from the id.
+ */
+export function senderKind(
   sender: Browser.runtime.MessageSender | undefined,
   ownExtensionId: string,
-): boolean {
-  if (!sender) return false;
-  if (sender.id !== ownExtensionId) return false;
+  ownOrigin?: string,
+): SenderKind | null {
+  if (!sender) return null;
+  if (sender.id !== ownExtensionId) return null;
 
   const url = parseURL(sender.url);
+  const origin = ownOrigin ?? `chrome-extension://${ownExtensionId}`;
 
   // Our own extension pages (popup, options) are trusted wherever they run.
-  //
-  // This check must come BEFORE the tab check: `options_ui.open_in_tab` makes
-  // the options page a real tab, so `sender.tab` is set and a tab-first rule
-  // would demand a github.com origin and reject the extension's own settings
-  // page — which is exactly what happened.
+  // Must come BEFORE the tab check: `options_ui.open_in_tab` makes the options
+  // page a real tab, so `sender.tab` is set.
   if (url && (url.protocol === "chrome-extension:" || url.protocol === "moz-extension:")) {
-    return url.host === ownExtensionId;
+    // `URL.origin` is the string "null" for non-special schemes in some
+    // runtimes, so build it by hand.
+    return `${url.protocol}//${url.host}` === origin ? "extension-page" : null;
   }
 
   // Anything else claiming to be a page must be a github.com content script.
-  // The content script is only registered for https://github.com/*, but that
-  // registration alone is not trusted.
   if (sender.tab) {
-    return url?.origin === GITHUB_ORIGIN;
+    return url?.origin === GITHUB_ORIGIN ? "content-script" : null;
   }
 
-  // No tab and no URL: an internal sender. Anything with a URL that reached
-  // here is neither one of our pages nor a GitHub content script.
-  return !sender.url;
+  // No tab and no URL: an internal sender (background / popup).
+  return sender.url ? null : "extension-page";
+}
+
+export function isTrustedSender(
+  sender: Browser.runtime.MessageSender | undefined,
+  ownExtensionId: string,
+  ownOrigin?: string,
+): boolean {
+  return senderKind(sender, ownExtensionId, ownOrigin) !== null;
 }
 
 function parseURL(value: string | undefined): URL | null {
@@ -61,6 +78,10 @@ function parseURL(value: string | undefined): URL | null {
 }
 
 /** Same trust rule, applied to `runtime.onConnect` ports (used for uploads). */
-export function isTrustedPort(port: Browser.runtime.Port, ownExtensionId: string): boolean {
-  return isTrustedSender(port.sender, ownExtensionId);
+export function isTrustedPort(
+  port: Browser.runtime.Port,
+  ownExtensionId: string,
+  ownOrigin?: string,
+): boolean {
+  return isTrustedSender(port.sender, ownExtensionId, ownOrigin);
 }
