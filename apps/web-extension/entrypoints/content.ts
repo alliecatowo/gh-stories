@@ -13,6 +13,7 @@ import {
   findDashboardFeed,
   findProfilePage,
   wrapAvatarWithRing,
+  scheduleRingLayout,
   type AccountIdentity,
   type RingDecoration,
 } from "../src/adapters/index.js";
@@ -68,14 +69,35 @@ export default defineContentScript({
       return out;
     }
 
-    /** Tears down decorations whose avatar GitHub has removed from the page. */
+    /** Tears down decorations whose avatar GitHub has removed from the page,
+     * and drops the ring of any avatar GitHub RECYCLED for someone else (list
+     * virtualisation and Turbo reuse the same <img>, changing its src/link). */
     function sweepDetached(): void {
+      let dropped = false;
       for (const [img, record] of tracked) {
-        if (img.isConnected) continue;
-        record.decoration.destroy();
-        tracked.delete(img);
-        processedImgs.delete(img);
+        if (!img.isConnected) {
+          record.decoration.destroy();
+          tracked.delete(img);
+          processedImgs.delete(img);
+          continue;
+        }
+        const next = extractIdentity(img);
+        if (
+          !next ||
+          next.login !== record.identity.login ||
+          next.githubUserId !== record.identity.githubUserId ||
+          next.anchor !== record.identity.anchor
+        ) {
+          record.decoration.destroy();
+          tracked.delete(img);
+          processedImgs.delete(img);
+          dropped = true;
+          continue;
+        }
+        record.decoration.reattach();
       }
+      // Re-decorate recycled avatars straight away with their new identity.
+      if (dropped) mutatedRoots.add(document.body);
     }
 
     async function flushStatusRequests(): Promise<void> {
@@ -245,22 +267,39 @@ export default defineContentScript({
       if (mutationTimer !== undefined) return;
       mutationTimer = window.setTimeout(() => {
         mutationTimer = undefined;
+        sweepDetached();
         const roots = Array.from(mutatedRoots);
         mutatedRoots.clear();
-        sweepDetached();
         for (const root of roots) processSubtree(root);
+        scheduleRingLayout();
       }, MUTATION_DEBOUNCE_MS);
     }
 
     const observer = new MutationObserver((mutations) => {
+      let recheck = false;
       for (const mutation of mutations) {
+        if (mutation.type === "attributes") {
+          // A tracked avatar (or its profile link) changed src/href: it may
+          // now belong to someone else.
+          const target = mutation.target;
+          if (target instanceof HTMLImageElement ? tracked.has(target) : target instanceof Element && target.querySelector("img.avatar")) {
+            recheck = true;
+          }
+          continue;
+        }
         for (const node of mutation.addedNodes) {
           if (node instanceof Element) mutatedRoots.add(node);
         }
       }
+      if (recheck) mutatedRoots.add(document.body);
       if (mutatedRoots.size > 0) scheduleMutationFlush();
     });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src", "href"],
+    });
 
     // --------------------------------------------------------- navigation
     let navigationTimer: number | undefined;
@@ -274,6 +313,7 @@ export default defineContentScript({
         sweepDetached();
         overlay.attach();
         processSubtree(document.body);
+        scheduleRingLayout();
       }, 0);
     }
 

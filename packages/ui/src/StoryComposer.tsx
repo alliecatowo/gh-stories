@@ -11,8 +11,15 @@ export interface StoryComposerDefaults {
   allowReactions: boolean;
 }
 
+export interface ComposerSubmitHelpers {
+  reportProgress(percent: number): void;
+}
+
 export interface StoryComposerProps {
-  onSubmit: (draft: ComposerDraft) => Promise<void>;
+  /** Resolve when the Story is posted; reject with an Error whose message is
+   * safe to show the person. Call `helpers.reportProgress(0..100)` with real
+   * upload progress to replace the placeholder ramp. */
+  onSubmit: (draft: ComposerDraft, helpers: ComposerSubmitHelpers) => Promise<void>;
   audiences: AudienceOption[];
   defaults: StoryComposerDefaults;
   onCancel: () => void;
@@ -215,14 +222,24 @@ export function StoryComposer(props: StoryComposerProps): React.JSX.Element {
     setStatus("uploading");
     setErrorMessage(null);
     setProgress(0);
+    let realProgress = false;
     const rampTimer = window.setInterval(() => {
+      if (realProgress) return;
       setProgress((p) => (p >= 95 ? p : p + (95 - p) * 0.15));
     }, 200);
+    const fallbackMessage = "Something went wrong while posting. You can try again.";
+    let exportFailed = false;
     try {
       const needsExport = kind === "image" && (rotation !== 0 || aspect !== "original" || overlay !== null);
-      const exported = needsExport
-        ? await exportImage(objectUrl, rotation, aspect, overlay, file.type)
-        : file;
+      let exported: File | Blob = file;
+      if (needsExport) {
+        try {
+          exported = await exportImage(objectUrl, rotation, aspect, overlay, file.type);
+        } catch (error) {
+          exportFailed = true;
+          throw error;
+        }
+      }
       const draft: ComposerDraft = {
         file: exported,
         filename: file.name,
@@ -233,14 +250,19 @@ export function StoryComposer(props: StoryComposerProps): React.JSX.Element {
         allowReplies,
         allowReactions,
       };
-      await onSubmit(draft);
+      await onSubmit(draft, {
+        reportProgress(percent) {
+          realProgress = true;
+          setProgress(Math.max(0, Math.min(99, percent)));
+        },
+      });
       window.clearInterval(rampTimer);
       setProgress(100);
       setStatus("processing");
       window.setTimeout(() => setStatus("published"), 1200);
-    } catch {
+    } catch (error) {
       window.clearInterval(rampTimer);
-      setErrorMessage("Something went wrong while posting. You can try again.");
+      setErrorMessage(!exportFailed && error instanceof Error && error.message ? error.message : fallbackMessage);
       setStatus("failed");
     }
   }

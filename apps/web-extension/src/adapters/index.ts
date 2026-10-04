@@ -4,7 +4,7 @@ export { findProfilePage, type ProfilePageInfo } from "./profile.js";
 export { TIMELINE_AVATAR_SELECTOR, findTimelineAvatars } from "./timeline.js";
 export { COMMENT_AVATAR_SELECTOR, findCommentAvatars } from "./comments.js";
 export { HOVERCARD_AVATAR_SELECTOR, findHovercardAvatars } from "./hovercard.js";
-export { wrapAvatarWithRing, type RingDecoration } from "./wrapAvatar.js";
+export { wrapAvatarWithRing, scheduleRingLayout, type RingDecoration } from "./wrapAvatar.js";
 
 import { TIMELINE_AVATAR_SELECTOR } from "./timeline.js";
 import { COMMENT_AVATAR_SELECTOR } from "./comments.js";

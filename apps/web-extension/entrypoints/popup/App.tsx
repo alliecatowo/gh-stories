@@ -82,6 +82,50 @@ export function App(): React.ReactElement {
 function SignIn({ onDone, error }: { onDone: () => void; error: string }): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(error);
+  const [userCode, setUserCode] = useState('');
+  const timer = useRef<number | undefined>(undefined);
+  const mounted = useRef(true);
+
+  // Poll for the result of a login the background is already driving. The
+  // background owns the real polling; this only refreshes the popup's view,
+  // so closing and reopening the popup keeps showing the pending state.
+  const watch = useCallback(
+    (intervalMs: number) => {
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(async () => {
+        const p = await callBackground({ type: 'ghs:session/login-poll' });
+        if (!mounted.current) return;
+        if (p.ok && p.data.status === 'approved') {
+          setBusy(false);
+          onDone();
+        } else if (p.ok && (p.data.status === 'denied' || p.data.status === 'expired')) {
+          setBusy(false);
+          setMessage('That sign-in was not completed. Try again.');
+        } else {
+          watch((p.ok ? (p.data.intervalSeconds ?? 2) : 2) * 1000);
+        }
+      }, intervalMs);
+    },
+    [onDone],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    void callBackground({ type: 'ghs:session/login-poll' }).then((p) => {
+      if (!mounted.current || !p.ok) return;
+      if (p.data.status === 'pending') {
+        setBusy(true);
+        setUserCode(p.data.userCode ?? '');
+        watch((p.data.intervalSeconds ?? 2) * 1000);
+      } else if (p.data.status === 'approved') {
+        onDone();
+      }
+    });
+    return () => {
+      mounted.current = false;
+      window.clearTimeout(timer.current);
+    };
+  }, [watch, onDone]);
 
   const start = async () => {
     setBusy(true);
@@ -92,20 +136,10 @@ function SignIn({ onDone, error }: { onDone: () => void; error: string }): React
       setBusy(false);
       return;
     }
+    setUserCode(res.data.userCode ?? '');
     // The background opens the service's authorization page and receives the
     // Stories token there. GitHub credentials never touch this context.
-    const poll = window.setInterval(async () => {
-      const p = await callBackground({ type: 'ghs:session/login-poll' });
-      if (p.ok && p.data.status === 'approved') {
-        window.clearInterval(poll);
-        setBusy(false);
-        onDone();
-      } else if (p.ok && (p.data.status === 'denied' || p.data.status === 'expired')) {
-        window.clearInterval(poll);
-        setBusy(false);
-        setMessage('That sign-in was not completed. Try again.');
-      }
-    }, 2000);
+    watch((res.data.intervalSeconds ?? 2) * 1000);
   };
 
   return (
@@ -116,6 +150,7 @@ function SignIn({ onDone, error }: { onDone: () => void; error: string }): React
       <button className="ghs-pop-btn ghs-pop-btn--primary" onClick={start} disabled={busy}>
         {busy ? 'Waiting for approval…' : 'Continue with GitHub'}
       </button>
+      {busy && userCode ? <p className="ghs-pop-muted">Confirm the code {userCode} in the tab that opened.</p> : null}
       <p className="ghs-pop-muted" style={{ marginTop: 18 }}>
         This never posts to GitHub and never changes who you follow there.
       </p>

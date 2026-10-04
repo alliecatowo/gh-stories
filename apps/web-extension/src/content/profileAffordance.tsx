@@ -30,13 +30,22 @@ function Affordance(props: { login: string; overlay: OverlayHost }): React.JSX.E
     void Promise.all([
       callBackground({ type: "ghs:session/get" }),
       callBackground({ type: "ghs:ring/status", githubUserIds: [], logins: [login] }),
-    ]).then(([session, ring]) => {
+    ]).then(async ([session, ring]) => {
       if (cancelled) return;
-      setSignedIn(session.ok && session.data.signedIn);
+      const isSignedIn = session.ok && session.data.signedIn;
+      setSignedIn(isSignedIn);
+      let self = session.ok && session.data.account?.login.toLowerCase() === login.toLowerCase();
       if (ring.ok && ring.data.entries[0]) {
         setHasStory(ring.data.entries[0].has_active);
-        setIsSelf(ring.data.entries[0].is_self === true);
+        self = self || ring.data.entries[0].is_self === true;
       }
+      setIsSelf(self);
+      if (!isSignedIn || self) return;
+      // Reflect the real follow state instead of always offering "Follow".
+      const state = await callBackground({ type: "ghs:graph/following", login });
+      if (cancelled) return;
+      if (state.ok) setFollowing(state.data.following);
+      else setError(state.error.message);
     });
     return () => {
       cancelled = true;

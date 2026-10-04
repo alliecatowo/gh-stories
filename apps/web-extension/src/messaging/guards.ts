@@ -13,6 +13,7 @@ import type {
   FeedGetRequest,
   GetSessionRequest,
   GraphActionRequest,
+  FollowingStateRequest,
   InboxGetRequest,
   InboxReadRequest,
   LoginPollRequest,
@@ -210,6 +211,10 @@ export function isGraphActionRequest(v: unknown): v is GraphActionRequest {
   return isLogin(v.login);
 }
 
+export function isFollowingStateRequest(v: unknown): v is FollowingStateRequest {
+  return isRecord(v) && v.type === "ghs:graph/following" && isLogin(v.login);
+}
+
 export function isSessionRevokeRequest(v: unknown): v is SessionRevokeRequest {
   return (
     isRecord(v) && v.type === "ghs:settings/revoke-session" && isUuid(v.sessionId)
@@ -259,6 +264,7 @@ const ALL_GUARDS: Array<(v: unknown) => v is RuntimeRequest> = [
   isAudienceListDeleteRequest,
   isAudienceListRemoveMemberRequest,
   isGraphActionRequest,
+  isFollowingStateRequest,
   isSessionRevokeRequest,
   isSignOutAllRequest,
   isAccountDeleteRequest,
