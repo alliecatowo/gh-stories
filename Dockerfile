@@ -9,7 +9,7 @@
 # and nothing else, running as a non-root user with no shell.
 
 # ---------------------------------------------------------------- build stage
-FROM --platform=$BUILDPLATFORM golang:1.27.2-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.3-bookworm AS build
 
 ARG TARGETOS
 ARG TARGETARCH
